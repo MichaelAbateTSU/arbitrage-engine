@@ -146,7 +146,11 @@ and restart recovery. SQLite is a WAL-enabled test/development fallback only.
 | Health / advancing heartbeats / SSE / nginx proxy | **Passed locally** |
 
 Zod's bundled pure-annotation messages are nonblocking vendor build warnings.
-GitHub-hosted CI itself was not run because the changes were not pushed.
+The original local handoff preceded publication. After owner authorization,
+implementation commit `7e4fe69640668b7bd270b7e2f9d469d68050fb3c` was pushed to
+`main`. [GitHub Validation run 36775574221](https://github.com/MichaelAbateTSU/arbitrage-engine/actions/runs/36775574221)
+**passed all four jobs: backend, frontend, system and secret-scan**, including
+Linux migrations, browser/accessibility validation and container builds.
 
 ## 13. Security review
 
@@ -265,8 +269,9 @@ images and the resulting stack ran successfully.
 ## 21. Git / handoff
 
 The owner authorized publication of the tested implementation on the original
-main branch. The publication commit and push receipt are recorded in repository
-history and this session; no branch switch or PR is needed. Source publication
+main branch. Implementation commit `7e4fe69` was pushed and its remote SHA verified;
+the complete hosted Validation workflow passed. No branch switch or PR was needed.
+Source publication
 does not provision Render or enable trading. The outstanding cloud deployment
 action is to authorize the Blueprint and supply owner production configuration.
 The plan, research, runbooks, safeguards and deployment steps are linked from README.
