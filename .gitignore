@@ -214,5 +214,20 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Arbitrage runtime and UI build artifacts
+arb.db
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo
+*.pem
+*.key
+.env.*
+!.env.example
+
 # Streamlit
 .streamlit/secrets.toml

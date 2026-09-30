@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arbitrage-engine"
+version = "0.1.0"
+description = "Auditable sports contract and paper-execution intelligence"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn>=0.34,<1",
+  "starlette>=1.6,<1.7",
+  "pydantic>=2.10,<3", "pydantic-settings>=2.7,<3",
+  "sqlalchemy[asyncio]>=2.0.37,<3", "alembic>=1.14,<2",
+  "asyncpg>=0.30,<1", "aiosqlite>=0.21,<1",
+  "httpx>=0.28,<1", "websockets>=15,<17",
+  "redis>=5.2,<8", "structlog>=25,<27",
+  "cryptography>=44", "argon2-cffi>=23.1",
+  "prometheus-client>=0.21,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<10", "pytest-asyncio>=0.25,<2",
+  "hypothesis>=6.123,<7", "respx>=0.22,<1",
+  "ruff>=0.9,<1", "mypy>=1.14,<2", "pip-audit>=2.8,<3",
+  "pyyaml>=6", "jsonschema>=4", "types-PyYAML>=6",
+  "pip-tools>=7.4,<8",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["alembic"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

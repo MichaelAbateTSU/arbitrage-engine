@@ -1,0 +1,173 @@
+previews:
+  generation: "off"
+
+envVarGroups:
+  - name: arb-safe-defaults
+    envVars:
+      - key: TRADING_MODE
+        value: paper
+      - key: LIVE_TRADING_ENABLED
+        value: "false"
+      - key: KALSHI_EXECUTION_ENABLED
+        value: "false"
+      - key: POLYMARKET_EXECUTION_ENABLED
+        value: "false"
+      - key: GLOBAL_KILL_SWITCH
+        value: "true"
+      - key: DATA_MODE
+        value: demo
+      - key: MAX_MONITORED_MARKETS
+        value: "80"
+      - key: REQUEST_RATE
+        value: "5"
+
+services:
+  - type: web
+    name: arb-api
+    runtime: docker
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./Dockerfile
+    preDeployCommand: alembic upgrade head
+    dockerCommand: sh -c 'uvicorn app.main:app --host 0.0.0.0 --port $PORT'
+    healthCheckPath: /health/ready
+    envVars:
+      - fromGroup: arb-safe-defaults
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arb-postgres
+          property: connectionString
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PUBLIC_READ_ENABLED
+        value: "false"
+
+  - type: worker
+    name: arb-market-data-worker
+    runtime: docker
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m app.workers market-data
+    envVars:
+      - fromGroup: arb-safe-defaults
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arb-postgres
+          property: connectionString
+      - key: ADMIN_PASSWORD_HASH
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: ADMIN_PASSWORD_HASH
+      - key: SESSION_SECRET
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: SESSION_SECRET
+      - key: ALLOWED_ORIGINS
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: ALLOWED_ORIGINS
+
+  - type: worker
+    name: arb-analysis-worker
+    runtime: docker
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m app.workers analysis
+    envVars:
+      - fromGroup: arb-safe-defaults
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arb-postgres
+          property: connectionString
+      - key: ADMIN_PASSWORD_HASH
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: ADMIN_PASSWORD_HASH
+      - key: SESSION_SECRET
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: SESSION_SECRET
+      - key: ALLOWED_ORIGINS
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: ALLOWED_ORIGINS
+
+  - type: worker
+    name: arb-maintenance-worker
+    runtime: docker
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python -m app.workers maintenance
+    envVars:
+      - fromGroup: arb-safe-defaults
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arb-postgres
+          property: connectionString
+      - key: ADMIN_PASSWORD_HASH
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: ADMIN_PASSWORD_HASH
+      - key: SESSION_SECRET
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: SESSION_SECRET
+      - key: ALLOWED_ORIGINS
+        fromService:
+          name: arb-api
+          type: web
+          envVarKey: ALLOWED_ORIGINS
+
+  - type: web
+    name: arb-frontend
+    runtime: docker
+    region: ohio
+    plan: starter
+    autoDeployTrigger: checksPass
+    dockerfilePath: ./frontend/Dockerfile
+    healthCheckPath: /health/ready
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: API_UPSTREAM
+        fromService:
+          name: arb-api
+          type: web
+          property: host
+      - key: API_PORT
+        value: "10000"
+
+databases:
+  - name: arb-postgres
+    region: ohio
+    plan: basic-256mb
+    databaseName: arb
+    user: arb
+    ipAllowList: []

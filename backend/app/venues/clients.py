@@ -1,0 +1,343 @@
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any, Literal, Protocol
+from urllib.parse import quote
+
+from app.config import Settings
+from app.domain import Book, D, Level, Market, Venue, now
+from app.matching import LEAGUES, Alias
+from app.pricing import complementary_book, ordered
+from app.venues.http import PublicHTTP, VenueError
+from app.venues.mapper import gamma_market, kalshi_market, us_market
+from app.venues.schemas import (
+    GammaMarket,
+    InternationalBook,
+    KalshiBook,
+    KalshiPage,
+    USBook,
+    USPage,
+)
+
+KALSHI_SERIES = {
+    "NFL": "KXNFLGAME",
+    "NBA": "KXNBAGAME",
+    "MLB": "KXMLBGAME",
+    "NHL": "KXNHLGAME",
+    "NCAAF": "KXNCAAFGAME",
+    "NCAAB": "KXNCAAMBGAME",
+}
+
+
+class VenueClient(Protocol):
+    venue: Venue
+
+    def discover(self, aliases: list[Alias]) -> AsyncIterator[Market]: ...
+    async def get_orderbooks(self, market: Market) -> list[Book]: ...
+    async def get_settlement(self, market: Market) -> D | None: ...
+
+
+class KalshiClient:
+    venue = Venue.KALSHI
+
+    def __init__(self, http: PublicHTTP, settings: Settings) -> None:
+        self.http = http
+        self.fee_deadlines: dict[str, datetime] = {}
+        self.base = (
+            "https://external-api.kalshi.com/trade-api/v2"
+            if settings.kalshi_environment == "production"
+            else "https://external-api.demo.kalshi.co/trade-api/v2"
+        )
+
+    async def _event_rate(self, event_id: str, series: dict[str, Any]) -> D | None:
+        self.fee_deadlines.pop(event_id, None)
+        cursor = ""
+        changes = []
+        seen = set()
+        while True:
+            data = await self.http.get(
+                f"{self.base}/events/fee_changes",
+                {"event_ticker": event_id, "limit": 1000, "cursor": cursor},
+            )
+            changes.extend(data["event_fee_changes"])
+            cursor = data["cursor"]
+            if not cursor:
+                break
+            if cursor in seen:
+                raise VenueError("PAGINATION_LOOP")
+            seen.add(cursor)
+        kind, multiplier = series["fee_type"], D(str(series["fee_multiplier"]))
+        for change in sorted(changes, key=lambda x: x["scheduled_ts"]):
+            effective = datetime.fromisoformat(change["scheduled_ts"].replace("Z", "+00:00"))
+            if effective <= now():
+                kind = change["fee_type_override"] or series["fee_type"]
+                override = change["fee_multiplier_override"]
+                multiplier = (
+                    D(str(override)) if override is not None else D(str(series["fee_multiplier"]))
+                )
+            else:
+                self.fee_deadlines[event_id] = min(
+                    self.fee_deadlines.get(event_id, effective), effective
+                )
+        if kind not in (
+            "quadratic",
+            "quadratic_with_maker_fees",
+            "quadratic_with_combo_maker_fees",
+        ):
+            return None
+        return D("0.07") * multiplier
+
+    async def discover(self, aliases: list[Alias]) -> AsyncIterator[Market]:
+        for league, ticker in KALSHI_SERIES.items():
+            series_data = await self.http.get(f"{self.base}/series/{ticker}")
+            series = series_data["series"]
+            cursor = ""
+            seen: set[str] = set()
+            rates: dict[str, D | None] = {}
+            while True:
+                data = await self.http.get(
+                    f"{self.base}/markets",
+                    {
+                        "series_ticker": ticker,
+                        "status": "open",
+                        "limit": 1000,
+                        "cursor": cursor,
+                        "mve_filter": "exclude",
+                    },
+                )
+                page = KalshiPage.model_validate(data)
+                for wire in page.markets:
+                    if wire.event_ticker not in rates:
+                        rates[wire.event_ticker] = await self._event_rate(wire.event_ticker, series)
+                    market = kalshi_market(wire, league, series, rates[wire.event_ticker], aliases)
+                    deadline = self.fee_deadlines.get(wire.event_ticker)
+                    if deadline and market.fee.valid_until:
+                        market.fee.valid_until = min(market.fee.valid_until, deadline)
+                    yield market
+                cursor = page.cursor
+                if not cursor:
+                    break
+                if cursor in seen:
+                    raise VenueError("PAGINATION_LOOP")
+                seen.add(cursor)
+
+    async def get_orderbooks(self, market: Market) -> list[Book]:
+        current = await self.http.get(f"{self.base}/markets/{quote(market.external_id, safe='')}")
+        state = current["market"]
+        if state["status"] != "active":
+            raise VenueError("MARKET_NOT_TRADABLE")
+        current_rules = (
+            f"{state.get('rules_primary', '')}\n{state.get('rules_secondary', '')}"
+        ).strip()
+        if current_rules != market.rules_text or state["title"] != market.title:
+            raise VenueError("MARKET_SPECIFICATION_CHANGED")
+        requested_at = now()
+        data = await self.http.get(
+            f"{self.base}/markets/{quote(market.external_id, safe='')}/orderbook", {"depth": 0}
+        )
+        wire = KalshiBook.model_validate(data)
+        yes = [Level(price=p, quantity=q) for p, q in wire.orderbook_fp["yes_dollars"] if q > 0]
+        no = [Level(price=p, quantity=q) for p, q in wire.orderbook_fp["no_dollars"] if q > 0]
+        return list(
+            complementary_book(
+                market.id,
+                yes,
+                no,
+                received_at=now(),
+                requested_at=requested_at,
+                source=market.source,
+            )
+        )
+
+    async def get_settlement(self, market: Market) -> D | None:
+        data = await self.http.get(f"{self.base}/markets/{quote(market.external_id, safe='')}")
+        wire = data["market"]
+        if wire["ticker"] != market.external_id:
+            raise VenueError("SETTLEMENT_IDENTITY_MISMATCH")
+        if wire["status"] not in ("settled", "finalized"):
+            return None
+        value = wire.get("settlement_value_dollars")
+        if value is None:
+            value = (
+                "1"
+                if wire.get("result") == "yes"
+                else ("0" if wire.get("result") == "no" else None)
+            )
+        if value is None:
+            return None
+        payout = D(str(value))
+        if payout not in (D("0"), D("0.5"), D("1")):
+            raise VenueError("SCALAR_SETTLEMENT_FEE_RECONCILIATION_REQUIRED")
+        return payout
+
+
+class InternationalClient:
+    venue = Venue.INTERNATIONAL
+
+    def __init__(self, http: PublicHTTP) -> None:
+        self.http = http
+        self.gamma = "https://gamma-api.polymarket.com"
+        self.clob = "https://clob.polymarket.com"
+
+    async def discover(self, aliases: list[Alias]) -> AsyncIterator[Market]:
+        offset = 0
+        seen = set()
+        while True:
+            data = await self.http.get(
+                f"{self.gamma}/markets", {"closed": "false", "limit": 500, "offset": offset}
+            )
+            if not isinstance(data, list):
+                raise VenueError("INVALID_DISCOVERY_ENVELOPE")
+            ids = tuple(str(x["id"]) for x in data)
+            if ids in seen and ids:
+                raise VenueError("PAGINATION_LOOP")
+            seen.add(ids)
+            for raw in data:
+                if raw.get("sportsMarketType") != "moneyline":
+                    continue
+                market = gamma_market(GammaMarket.model_validate(raw), aliases)
+                if market.league in LEAGUES:
+                    yield market
+            if len(data) < 500:
+                return
+            offset += 500
+
+    async def get_orderbooks(self, market: Market) -> list[Book]:
+        books = []
+        if len(market.token_ids) != 2:
+            raise VenueError("MISSING_TOKEN_IDS")
+        for side, token in market.token_ids.items():
+            requested_at = now()
+            data = await self.http.get(f"{self.clob}/book", {"token_id": token})
+            wire = InternationalBook.model_validate(data)
+            if wire.asset_id != token:
+                raise VenueError("BOOK_TOKEN_MISMATCH")
+            if not market.price_ranges or market.price_ranges != [
+                market.price_ranges[0].model_copy(update={"step": D(wire.tick_size)})
+            ]:
+                raise VenueError("TICK_CHANGED_REDISCOVERY_REQUIRED")
+            books.append(
+                Book(
+                    market_id=market.id,
+                    outcome=side,
+                    bids=ordered(
+                        [Level(price=D(x["price"]), quantity=D(x["size"])) for x in wire.bids], True
+                    ),
+                    asks=ordered(
+                        [Level(price=D(x["price"]), quantity=D(x["size"])) for x in wire.asks]
+                    ),
+                    exchange_at=datetime.fromtimestamp(int(wire.timestamp) / 1000, UTC),
+                    received_at=now(),
+                    requested_at=requested_at,
+                    source=market.source,
+                )
+            )
+        return books
+
+    async def get_settlement(self, market: Market) -> D | None:
+        condition = market.raw.get("conditionId")
+        if not condition:
+            raise VenueError("MISSING_CONDITION_ID")
+        data = await self.http.get(
+            "https://data-api.polymarket.com/v2/resolutions", {"condition": condition}
+        )
+        rows = [row for row in data["data"] if row.get("condition_id") == condition]
+        if not rows or rows[0]["status"] != "resolved":
+            return None
+        payouts = rows[0].get("payouts")
+        if payouts is None:
+            return None
+        if (
+            len(payouts) != 2
+            or any(type(value) is not int or value < 0 for value in payouts)
+            or sum(payouts) != 1_000_000
+        ):
+            raise VenueError("INVALID_SETTLEMENT_PAYOUT_VECTOR")
+        return D(payouts[0]) / 1_000_000
+
+
+class USClient:
+    venue = Venue.US
+
+    def __init__(self, http: PublicHTTP) -> None:
+        self.http = http
+        self.base = "https://gateway.polymarket.us"
+
+    async def discover(self, aliases: list[Alias]) -> AsyncIterator[Market]:
+        offset = 0
+        seen = set()
+        while True:
+            data = await self.http.get(
+                f"{self.base}/v1/markets",
+                {
+                    "active": "true",
+                    "closed": "false",
+                    "limit": 100,
+                    "offset": offset,
+                    "sportsMarketTypes": "SPORTS_MARKET_TYPE_MONEYLINE",
+                },
+            )
+            page = USPage.model_validate(data)
+            ids = tuple(x.id for x in page.markets)
+            if ids in seen and ids:
+                raise VenueError("PAGINATION_LOOP")
+            seen.add(ids)
+            for wire in page.markets:
+                market = us_market(wire, aliases)
+                if market.league in LEAGUES:
+                    yield market
+            if len(page.markets) < 100:
+                return
+            offset += 100
+
+    async def get_orderbooks(self, market: Market) -> list[Book]:
+        requested_at = now()
+        data = await self.http.get(
+            f"{self.base}/v1/markets/{quote(market.external_id, safe='')}/book"
+        )
+        return us_books(market, USBook.model_validate(data), requested_at=requested_at)
+
+    async def get_settlement(self, market: Market) -> D | None:
+        try:
+            data = await self.http.get(
+                f"{self.base}/v1/markets/{quote(market.external_id, safe='')}/settlement"
+            )
+        except VenueError as exc:
+            if exc.status == 404:  # Official endpoint: market absent or not settled.
+                return None
+            raise
+        if data["slug"] != market.external_id:
+            raise VenueError("SETTLEMENT_IDENTITY_MISMATCH")
+        payout = D(str(data["settlement"]))
+        if not payout.is_finite() or not D("0") <= payout <= D("1"):
+            raise VenueError("INVALID_SETTLEMENT_PAYOUT")
+        return payout
+
+
+def us_books(
+    market: Market,
+    wire: USBook,
+    transport: Literal["rest", "websocket", "demo"] = "rest",
+    requested_at: datetime | None = None,
+) -> list[Book]:
+    data = wire.marketData
+    if data.marketSlug != market.external_id:
+        raise VenueError("BOOK_MARKET_MISMATCH")
+    if any(x.px.currency != "USD" for x in data.bids + data.offers):
+        raise VenueError("UNKNOWN_BOOK_CURRENCY")
+    yes = ordered([Level(price=x.px.value, quantity=x.qty) for x in data.bids if x.qty > 0], True)
+    no = ordered(
+        [Level(price=1 - x.px.value, quantity=x.qty) for x in data.offers if x.qty > 0], True
+    )
+    return list(
+        complementary_book(
+            market.id,
+            yes,
+            no,
+            exchange_at=data.transactTime,
+            received_at=now(),
+            requested_at=requested_at,
+            connected=data.state == "MARKET_STATE_OPEN",
+            transport=transport,
+            source=market.source,
+        )
+    )
