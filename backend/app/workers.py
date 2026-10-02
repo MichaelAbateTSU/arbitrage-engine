@@ -137,8 +137,11 @@ async def persist_stream(
             await changed.wait()
             if reader.done():
                 await reader
-                return
+                if not pending:
+                    return
             await asyncio.sleep(0.1)
+            if reader.done():
+                await reader
             books = list(pending.values())
             pending.clear()
             changed.clear()
@@ -156,6 +159,9 @@ async def persist_stream(
                     error=None,
                 )
                 last_health = time.monotonic()
+            if reader.done():
+                await reader
+                return
     finally:
         reader.cancel()
         await asyncio.gather(reader, return_exceptions=True)
