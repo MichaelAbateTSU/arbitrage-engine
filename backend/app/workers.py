@@ -1,7 +1,8 @@
 import argparse
 import asyncio
 import random
-from collections.abc import Awaitable, Callable
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import timedelta
 from uuid import uuid4
 
@@ -24,7 +25,7 @@ from app.db import (
     create_database,
 )
 from app.demo import demo_books, demo_markets
-from app.domain import Venue, now
+from app.domain import Book, Side, Venue, now
 from app.pricing import BookIntegrityError
 from app.service import analysis_tick, paper_tick, rematch_all
 from app.store import Store
@@ -110,6 +111,56 @@ async def run_discovery(store: Store, clients: list[VenueClient]) -> None:
     await rematch_all(store)
 
 
+async def persist_stream(
+    store: Store,
+    client: VenueClient,
+    generator: AsyncIterator[list[Book]],
+    monitored: int,
+    reconnects: int,
+) -> None:
+    pending: dict[tuple[str, Side], Book] = {}
+    changed = asyncio.Event()
+
+    async def receive() -> None:
+        try:
+            async for books in generator:
+                for book in books:
+                    pending[(book.market_id, book.outcome)] = book
+                changed.set()
+        finally:
+            changed.set()
+
+    reader = asyncio.create_task(receive())
+    last_health = 0.0
+    try:
+        while True:
+            await changed.wait()
+            if reader.done():
+                await reader
+                return
+            await asyncio.sleep(0.1)
+            books = list(pending.values())
+            pending.clear()
+            changed.clear()
+            if not books:
+                continue
+            await store.save_books(books)
+            BOOKS.labels(client.venue).inc(len(books))
+            if time.monotonic() - last_health >= 2:
+                await store.health(
+                    client.venue,
+                    feed="websocket",
+                    last_book=max(book.received_at for book in books).isoformat(),
+                    reconnects=reconnects,
+                    monitored=monitored,
+                    error=None,
+                )
+                last_health = time.monotonic()
+    finally:
+        reader.cancel()
+        await asyncio.gather(reader, return_exceptions=True)
+
+
 async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> None:
     reconnects = 0
     while True:
@@ -148,17 +199,7 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
                 # Periodic reconnect requests an authoritative snapshot and revised
                 # universe. No REST snapshot is raced against an unsequenced delta.
                 async with asyncio.timeout(settings.discovery_interval_seconds):
-                    async for books in generator:
-                        await store.save_books(books)
-                        BOOKS.labels(client.venue).inc(len(books))
-                        await store.health(
-                            client.venue,
-                            feed="websocket",
-                            last_book=now().isoformat(),
-                            reconnects=reconnects,
-                            monitored=len(markets),
-                            error=None,
-                        )
+                    await persist_stream(store, client, generator, len(markets), reconnects)
             else:
                 for market in markets:
                     books = await client.get_orderbooks(market)

@@ -52,6 +52,10 @@ are database transactions; network requests never occur inside them.
 Paper evaluation has its own fast task within the analysis role so a long
 multi-market detection sweep cannot defer due intents. Daily analytics selects
 small scalar projections, not every archived raw calculation/book payload.
+Stream reconstruction is independent of database persistence: every delta is
+applied in sequence, then latest full normalized books are coalesced in a bounded
+per-market/outcome buffer and flushed at 100ms cadence. Database latency cannot
+stall socket heartbeats; original receive/exchange timestamps are retained.
 
 Application readiness checks PostgreSQL migration version and optional configured
 Redis; venue outages remain separately visible. Detailed snapshots expire after
