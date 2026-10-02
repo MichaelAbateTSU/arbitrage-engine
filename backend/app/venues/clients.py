@@ -179,27 +179,34 @@ class InternationalClient:
         self.clob = "https://clob.polymarket.com"
 
     async def discover(self, aliases: list[Alias]) -> AsyncIterator[Market]:
-        offset = 0
-        seen = set()
+        cursor: str | None = None
+        seen: set[str] = set()
         while True:
+            params: dict[str, Any] = {
+                "closed": "false",
+                "limit": 100,
+                "sports_market_types": "moneyline",
+            }
+            if cursor:
+                params["after_cursor"] = cursor
             data = await self.http.get(
-                f"{self.gamma}/markets", {"closed": "false", "limit": 500, "offset": offset}
+                f"{self.gamma}/markets/keyset",
+                params,
             )
-            if not isinstance(data, list):
+            if not isinstance(data, dict) or not isinstance(data.get("markets"), list):
                 raise VenueError("INVALID_DISCOVERY_ENVELOPE")
-            ids = tuple(str(x["id"]) for x in data)
-            if ids in seen and ids:
-                raise VenueError("PAGINATION_LOOP")
-            seen.add(ids)
-            for raw in data:
+            for raw in data["markets"]:
                 if raw.get("sportsMarketType") != "moneyline":
                     continue
                 market = gamma_market(GammaMarket.model_validate(raw), aliases)
                 if market.league in LEAGUES:
                     yield market
-            if len(data) < 500:
+            cursor = data.get("next_cursor")
+            if not cursor:
                 return
-            offset += 500
+            if cursor in seen:
+                raise VenueError("PAGINATION_LOOP")
+            seen.add(cursor)
 
     async def get_orderbooks(self, market: Market) -> list[Book]:
         books = []
@@ -273,7 +280,6 @@ class USClient:
                     "closed": "false",
                     "limit": 100,
                     "offset": offset,
-                    "sportsMarketTypes": "SPORTS_MARKET_TYPE_MONEYLINE",
                 },
             )
             page = USPage.model_validate(data)
@@ -283,11 +289,11 @@ class USClient:
             seen.add(ids)
             for wire in page.markets:
                 market = us_market(wire, aliases)
-                if market.league in LEAGUES:
+                if market.league in LEAGUES and market.market_type == "moneyline":
                     yield market
-            if len(page.markets) < 100:
+            if not page.markets:
                 return
-            offset += 100
+            offset += len(page.markets)
 
     async def get_orderbooks(self, market: Market) -> list[Book]:
         requested_at = now()

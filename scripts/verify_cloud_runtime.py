@@ -108,6 +108,10 @@ async def main():
             raise RuntimeError("CLOUD_WORKER_HEARTBEAT_MISSING")
         if not counts["markets"]:
             raise RuntimeError("CLOUD_DISCOVERY_EMPTY")
+        if len(market_counts) < 2:
+            raise RuntimeError("CLOUD_CROSS_VENUE_DISCOVERY_INCOMPLETE")
+        if not payload["fresh_synchronized_books"]:
+            raise RuntimeError("CLOUD_FRESH_BOOKS_UNAVAILABLE")
     finally:
         await engine.dispose()
 

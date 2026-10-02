@@ -125,6 +125,41 @@ def test_lifecycle_invalidates_even_a_connected_book():
     assert not market.tradable
 
 
+def test_event_lifecycle_consumes_the_shared_lifecycle_sequence():
+    market = demo_markets()[0]
+    state = KalshiStreamState([market])
+    state.apply(
+        {
+            "type": "market_lifecycle_v2",
+            "sid": 2,
+            "seq": 1,
+            "msg": {"market_ticker": "UNTRACKED", "event_type": "created"},
+        }
+    )
+    assert (
+        state.apply(
+            {
+                "type": "event_lifecycle",
+                "sid": 2,
+                "seq": 2,
+                "msg": {"event_ticker": "NEW"},
+            }
+        )
+        == []
+    )
+    assert (
+        state.apply(
+            {
+                "type": "market_lifecycle_v2",
+                "sid": 2,
+                "seq": 3,
+                "msg": {"market_ticker": "UNTRACKED", "event_type": "created"},
+            }
+        )
+        == []
+    )
+
+
 def test_international_absolute_deltas_do_not_duplicate():
     market = demo_markets()[3]
     market.token_ids = {Side.YES: "123", Side.NO: "456"}

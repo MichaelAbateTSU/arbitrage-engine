@@ -18,6 +18,8 @@ references. Current documented Trade API OpenAPI version: **3.32.0**.
 - Books: `orderbook_fp.yes_dollars/no_dollars`, decimal-string quantities/prices.
 - WS snapshot: `yes_dollars_fp/no_dollars_fp`; deltas `price_dollars/delta_fp`.
 - Sequences are checked per subscription ID across markets.
+- Event-creation `event_lifecycle` messages share the lifecycle subscription
+  sequence and must advance it even when they are not market-book updates.
 - Lifecycle subscription is separate and unfiltered (the official channel rejects
   ticker filters); changes invalidate the market until authoritative rediscovery.
 - RSA-PSS SHA256 or Ed25519 headers sign timestamp + method + path, no query.
@@ -50,7 +52,10 @@ Index: https://docs.polymarket.com/llms.txt
 Reviewed API/wallet auth, discovery, market details, current fees, market WebSocket,
 and geographic restrictions.
 
-- Gamma metadata: `https://gamma-api.polymarket.com`, offset-paginated `/markets`.
+- Gamma metadata: `https://gamma-api.polymarket.com/markets/keyset`, documented
+  `sports_market_types=moneyline` filtering and `next_cursor`/`after_cursor`.
+  Observed legacy pages were capped below requested limits; length is not proof
+  of discovery completion.
 - CLOB: `https://clob.polymarket.com/book?token_id=...`.
 - Public WS: `wss://ws-subscriptions-clob.polymarket.com/ws/market`.
 - `outcomes` and `clobTokenIds` are JSON-encoded arrays; correlate by index.
@@ -85,6 +90,8 @@ Reviewed public markets/books, retail authentication/WebSockets, fee schedule an
 rate limits. Retail gateway OpenAPI version **1.0.0**.
 
 - Public: `https://gateway.polymarket.us/v1/markets`, offset pagination.
+- Sports types are filtered locally: the observed uppercase server-side filter
+  omitted supported leagues. Offset pages continue until an empty page.
 - Book: `/v1/markets/{slug}/book`, `marketData.bids/offers`.
 - Price is `px.value`, quantity `qty`; currency must be USD.
 - Single long/short instrument: marketSides' `long=true` identifies YES; do not

@@ -75,16 +75,18 @@ class KalshiStreamState:
         kind = data["type"]
         if kind == "error":
             raise VenueError("KALSHI_SUBSCRIPTION_ERROR")
+        if "sid" in data and "seq" in data:
+            sid, seq = int(data["sid"]), int(data["seq"])
+            previous = self.sequences.get(sid)
+            if previous is not None:
+                if seq == previous:
+                    return []
+                if seq != previous + 1:
+                    raise BookIntegrityError("SEQUENCE_GAP")
+            self.sequences[sid] = seq
         if kind not in ("orderbook_snapshot", "orderbook_delta", "market_lifecycle_v2"):
             return []
-        sid, seq = int(data["sid"]), int(data["seq"])
-        previous = self.sequences.get(sid)
-        if previous is not None:
-            if seq == previous:
-                return []
-            if seq != previous + 1:
-                raise BookIntegrityError("SEQUENCE_GAP")
-        self.sequences[sid] = seq
+        seq = int(data["seq"])
         msg = data["msg"]
         ticker = msg["market_ticker"]
         if kind == "market_lifecycle_v2":

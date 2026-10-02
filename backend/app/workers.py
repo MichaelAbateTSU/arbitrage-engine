@@ -25,6 +25,7 @@ from app.db import (
 )
 from app.demo import demo_books, demo_markets
 from app.domain import Venue, now
+from app.pricing import BookIntegrityError
 from app.service import analysis_tick, paper_tick, rematch_all
 from app.store import Store
 from app.telemetry import BOOKS, DISCOVERY, FAILURES, configure_logging
@@ -45,7 +46,11 @@ async def guarded_loop(
         try:
             await action()
         except (SQLAlchemyError, ValueError, RuntimeError) as exc:
-            code = exc.code if isinstance(exc, VenueError) else type(exc).__name__
+            code = (
+                exc.code
+                if isinstance(exc, VenueError)
+                else (str(exc) if isinstance(exc, BookIntegrityError) else type(exc).__name__)
+            )
             FAILURES.labels(role, code).inc()
             log.error("worker_iteration_failed", role=role, error_code=code)
             if not isinstance(exc, SQLAlchemyError):
