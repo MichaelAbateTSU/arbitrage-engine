@@ -6,7 +6,7 @@ COPY frontend/ ./
 RUN npm run build
 
 FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 FRONTEND_DIST=/srv/frontend/dist
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 FRONTEND_DIST=/srv/frontend/dist PYTHONPATH=/srv/backend
 WORKDIR /srv/backend
 ARG PIP_INDEX_URL=https://pypi.org/simple
 COPY backend/requirements.lock ./
