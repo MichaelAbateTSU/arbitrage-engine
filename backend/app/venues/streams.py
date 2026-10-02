@@ -21,17 +21,28 @@ from app.venues.schemas import USBook
 def kalshi_headers(settings: Settings, path: str = "/trade-api/ws/v2") -> dict[str, str]:
     if not settings.kalshi_api_key or not settings.kalshi_private_key:
         raise VenueError("KALSHI_STREAM_CREDENTIALS_REQUIRED")
-    key = serialization.load_pem_private_key(
-        settings.kalshi_private_key.get_secret_value().replace("\\n", "\n").encode(), password=None
-    )
-    if not isinstance(key, rsa.RSAPrivateKey):
+    encoded = settings.kalshi_private_key.get_secret_value().replace("\\n", "\n").strip().encode()
+    try:
+        if encoded.startswith(b"-----BEGIN"):
+            key = serialization.load_pem_private_key(encoded, password=None)
+        else:
+            key = serialization.load_der_private_key(
+                base64.b64decode(encoded, validate=True), password=None
+            )
+    except (ValueError, TypeError):
+        raise VenueError("INVALID_KALSHI_PRIVATE_KEY_FORMAT") from None
+    if not isinstance(key, (rsa.RSAPrivateKey, ed25519.Ed25519PrivateKey)):
         raise VenueError("INVALID_KALSHI_KEY_TYPE")
     timestamp = str(int(time.time() * 1000))
-    signature = key.sign(
-        f"{timestamp}GET{path}".encode(),
-        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
-        hashes.SHA256(),
-    )
+    message = f"{timestamp}GET{path}".encode()
+    if isinstance(key, ed25519.Ed25519PrivateKey):
+        signature = key.sign(message)
+    else:
+        signature = key.sign(
+            message,
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.DIGEST_LENGTH),
+            hashes.SHA256(),
+        )
     return {
         "KALSHI-ACCESS-KEY": settings.kalshi_api_key.get_secret_value(),
         "KALSHI-ACCESS-TIMESTAMP": timestamp,

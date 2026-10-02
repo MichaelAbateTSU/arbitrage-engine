@@ -103,7 +103,7 @@ See `.env.example`. Important settings:
 | `ADMIN_PASSWORD_HASH` | Argon2id hash; no default production password |
 | `SESSION_SECRET` | At least 32 characters in production; rotation revokes sessions |
 | `ALLOWED_ORIGINS` | Exact frontend origin, HTTPS in production |
-| `KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY` | Optional authenticated **market-data** WebSocket credentials |
+| `KALSHI_API_KEY`, `KALSHI_PRIVATE_KEY` | Optional authenticated **market-data** credentials; RSA-PSS or Ed25519 signing, PEM or base64 PKCS#8 DER |
 | `POLYMARKET_US_KEY_ID`, `POLYMARKET_US_SECRET_KEY` | Optional US **market-data** WebSocket credentials |
 | `MAX_MONITORED_MARKETS=80` | Per-venue bounded pricing universe; discovery remains paginated |
 | `REQUEST_RATE=5` | Shared public request pacing; maximum supported value 10 |

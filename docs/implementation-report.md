@@ -41,14 +41,17 @@ Subscribed sequence continuity is subscription-scoped; lifecycle changes invalid
 markets until rediscovery. REST prices are conservatively dated at request start.
 
 Authenticated WebSocket signing and reconstruction are implemented and
-fixture-tested; the live authenticated connection was **not verified because no
-Kalshi market-data credentials were supplied**. Public REST fallback is available.
+fixture-tested. On 2026-10-02 the supplied credentials successfully subscribed
+to a real order book and returned two normalized outcome books. The adapter was
+updated for Kalshi's currently documented Ed25519 support as well as RSA-PSS;
+private key material was neither displayed nor committed.
 
 ## 5. Polymarket status
 
 **US public production REST/book probe passed**, using typed long/short market
-sides, USD amounts, fee coefficient and gateway books. Authenticated US
-market-data WebSocket is implemented but **not live-verified without credentials**.
+sides, USD amounts, fee coefficient and gateway books. On 2026-10-02 the supplied
+US credentials passed authenticated market-data subscription and returned two
+normalized outcome books.
 
 **International public Gamma/CLOB REST and actual public WebSocket passed.**
 Outcome token mapping, absolute-size deltas and application heartbeats are wired.
@@ -131,6 +134,7 @@ and restart recovery. SQLite is a WAL-enabled test/development fallback only.
 | Check | Result |
 |---|---|
 | Backend unit/property/adapter/API/integration/settlement suite | **68 passed**, one optional PostgreSQL test skipped when its dedicated URL was absent |
+| 2026-10-02 signing compatibility regression suite | **76 passed**, including RSA/Ed25519 PEM/DER signature verification; optional PostgreSQL test skipped in this run |
 | Optional real PostgreSQL regression in isolated migrated database | **1 passed separately** |
 | Frontend component/schema tests | **7 passed** |
 | Chromium seven-page authenticated/mobile end-to-end flow | **1 passed** |
@@ -203,7 +207,7 @@ For production: an owner-generated `ADMIN_PASSWORD_HASH`, generated/managed
 `SESSION_SECRET`, exact HTTPS `ALLOWED_ORIGINS`, Render-provided PostgreSQL URL and
 chosen source mode. No execution credentials are required.
 
-Optional authenticated data streams: Kalshi key/RSA private key and US
+Optional authenticated data streams: Kalshi key/RSA or Ed25519 private key and US
 Polymarket key/Ed25519 secret. Keep them worker-side. Review data rights,
 eligibility and legal geography before commercial distribution.
 

@@ -20,7 +20,10 @@ references. Current documented Trade API OpenAPI version: **3.32.0**.
 - Sequences are checked per subscription ID across markets.
 - Lifecycle subscription is separate and unfiltered (the official channel rejects
   ticker filters); changes invalidate the market until authoritative rediscovery.
-- RSA-PSS SHA256 headers sign timestamp + method + path, no query.
+- RSA-PSS SHA256 or Ed25519 headers sign timestamp + method + path, no query.
+  Rechecked 2026-10-02: Kalshi now documents both key types and recommends
+  Ed25519. The adapter chooses the algorithm from the parsed key, accepting PEM,
+  escaped-newline PEM, or base64 PKCS#8 DER without generating/replacing key material.
 - Price grid source: `price_ranges`, not legacy integer cents or structure labels.
 - Fee source: series type/multiplier plus effective `/events/fee_changes`.
 - Settlement: terminal market status and `settlement_value_dollars`, never last price.
