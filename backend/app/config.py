@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     )
     public_read_enabled: bool = False
     build_version: str = "development"
+    operator_country: str = "US"
+    operator_region: str = "GA"
+    validation_interval_seconds: int = 10
     kalshi_environment: Literal["production", "demo"] = "production"
     kalshi_api_key: SecretStr | None = None
     kalshi_private_key: SecretStr | None = None
@@ -65,6 +68,7 @@ class Settings(BaseSettings):
                 self.request_rate,
                 self.book_retention_days,
                 self.history_retention_days,
+                self.validation_interval_seconds,
             )
             < 1
         ):

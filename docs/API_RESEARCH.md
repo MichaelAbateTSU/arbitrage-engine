@@ -135,3 +135,29 @@ No automatic inference of game start from market expiry; no variable-price refun
 complementarity; no unknown fee as zero; no fabricated account/trade success;
 no claimed lossless international stream; no observed queue model without data;
 no full commercial redistribution or legal eligibility assumption.
+
+## Opportunity-validation recheck
+
+Rechecked the official eligibility, fees and order-book documentation for the
+validation phase. Kalshi's book contains YES and NO **bids**; executable YES asks
+are one minus NO bids and NO asks are one minus YES bids. Both directions walk
+matched ask depth rather than using bids as purchase prices.
+
+The international Polymarket geoblock reference lists the United States as
+**close-only**, including API orders. Public Gamma/CLOB prices do not establish
+order eligibility. Polymarket US is a separate product with public market host
+`gateway.polymarket.us` and authenticated account host `api.polymarket.us`.
+Its jurisdiction/KYC and market-specific restrictions require independent
+operator evidence; US/GA residency is not automatically permission to trade.
+
+GET-only account evidence uses Kalshi `/trade-api/v2/portfolio/balance` and US
+Polymarket `/v1/account/balances`. The former accepts portfolio-balance read
+scope, so its success is deliberately not order-permission proof. Buying power
+is parsed as Decimal without monetary float conversion. International market
+fees remain sourced from the applicable market parameters, never assumed zero.
+
+Additional references:
+https://docs.kalshi.com/getting_started/orderbook_responses
+https://docs.kalshi.com/api-reference/portfolio/get-balance
+https://docs.polymarket.us/api-reference/account/get-account-balances
+https://docs.polymarket.us/learn/trading/access-and-limits/trading-restrictions

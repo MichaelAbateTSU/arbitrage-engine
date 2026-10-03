@@ -53,3 +53,31 @@ full backtest. Verify backups/restore behavior in an isolated database.
 Rotate operator hash/session secret, revoke compromised venue data keys at their
 source, replace worker-only secrets and restart feeds. Never log credential
 headers. See SECURITY.md and incident response.
+
+## Opportunity validation
+
+Migrate to `6e9f3a2c7d10` before deploying validation workers. Keep live execution
+disabled and the ordinary paper kill switch active. The independent shadow
+engine is separately enabled/paused through its audited configuration and uses
+only virtual balances; the paper kill switch does not stop diagnostic collection
+or virtual shadow trials.
+
+Use **Opportunity validation** to inspect each direction's depth-adjusted asks,
+priced quantity, book age, profit and every blocker. Filter counts are distinct
+pairs, not sums of book updates. Account-read success is not permission to trade.
+Review the persisted watchlist's outcomes, deadlines, resolution sources,
+overtime, draw, cancellation and postponement evidence. Approve only when the
+scenario matrix is complete and the independent review is documented.
+
+Enter actual per-venue settlement/rebalancing/fixed-cost assumptions with
+provenance and daily operating costs separately. Unknown costs stay blocked.
+Account attestations expire; international US close-only restrictions cannot be
+overridden. Never paste secrets in any evidence field.
+
+Inspect `/api/v1/validation/summary`, `/candidates`, `/episodes` and
+`/shadow-trials` under the normal authenticated reader policy.
+Configuration updates require admin/CSRF, current revision and an audit reason.
+After 7-14 days, compare distinct episodes, available coverage, baseline versus
+injected stress, unsettled versus observed-settlement P&L, failure losses and
+capital lockup after operating costs. Missing evidence or zero profitable
+episodes does not justify relaxing limits. No timer or result enables live mode.

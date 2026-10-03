@@ -20,6 +20,7 @@ from app.config import Settings, get_settings
 from app.db import create_database
 from app.store import Store
 from app.telemetry import LATENCY, configure_logging
+from app.validation_api import router as validation_router
 
 log = structlog.get_logger()
 
@@ -119,7 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 result["database"] = "healthy"
                 revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
                 result["schema"] = str(revision or "unavailable")
-                result["ready"] = revision == "efb2041d5699"
+                result["ready"] = revision == "6e9f3a2c7d10"
         except SQLAlchemyError:
             log.error("dependency_failed", error_code="DATABASE_OR_MIGRATION_UNAVAILABLE")
         if redis:
@@ -153,6 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Read-only sports contracts and hypothetical paper execution. No live orders.",
         lifespan=lifespan,
     )
+    app.include_router(validation_router)
     app.state.settings = config
     app.state.store = store
     app.state.dependencies = dependencies

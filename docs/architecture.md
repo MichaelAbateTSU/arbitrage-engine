@@ -22,6 +22,40 @@ to the API over private networking. Redis is optional, not required for coordina
    records commit together with audit/critical unhedged alerts.
 8. API exposes scoped records, analytics and update notifications. SSE prompts
    refetches; PostgreSQL remains the durable source, not browser state.
+9. Independent validation evaluates every pair in both directions, even when
+   unapproved, retaining all rule/book/fee/cost/account blockers. Latest
+   diagnostics, rule-versioned episodes, eligibility evidence and configuration
+   use dedicated PostgreSQL tables. Repeated observations do not become trades.
+10. Virtual shadow reservations recheck current approvals and fresh source
+    versions transactionally. Delayed fills, rejected-second-leg and partial-fill
+    stress cases have distinct persisted intents. Bid-side emergency unwinds
+    obey lot and minimum constraints; remaining hedges/residuals retain capital
+    until both public final settlements. No order endpoint is called.
+
+## Eligibility and validation evidence
+
+Public market access, authenticated GET-only buying power, operator attestations
+and order permission are different facts. International Gamma/CLOB and the
+Polymarket US gateway/account API are separate products. US/GA operator location
+is explicit configuration, not the Render host region. International US
+close-only status cannot be attested away. No live execution exists even for a
+fully evidenced account.
+
+Public shadow qualification always requires independent settlement review plus
+verified additional-cost assumptions. Scenario proofs cover each team win and
+applicable draw/void outcomes; unknowns and fair-price cancellations fail closed.
+Diagnostics distinguish financial/settlement, operator-execution and shadow
+blockers. Fees and additional costs reduce both profit and available sizing.
+
+The bounded watchlist preferentially selects same-currency pairs with observed
+depth, without approval. Collection defaults to 14 days, $500 virtual balances,
+$25 virtual leg caps, ten baseline trials/day and a $25 daily loss cutoff.
+The combined capital cap is conservatively reserved against both participating
+virtual wallets, including aggregate Kalshi exposure across Polymarket products.
+Realized losses reduce available wallets; projected profits never replenish them.
+Baseline and injected stress results remain separate, with P&L basis labels,
+aggregate trial-seconds, capital-weighted USD-seconds and evidenced operating
+costs. An elapsed diagnostic window never enables trading.
 
 ```mermaid
 sequenceDiagram

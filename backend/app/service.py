@@ -90,7 +90,16 @@ async def reserve_trade(store: Store, opportunity: Opportunity) -> bool:
         if current is None or current.risk_status != "qualified":
             return False
         c = opportunity.calculation
-        capital = c.cost_one + c.cost_two + c.fee_one + c.fee_two + c.slippage + c.safety_buffer
+        capital = (
+            c.cost_one
+            + c.cost_two
+            + c.fee_one
+            + c.fee_two
+            + c.slippage
+            + c.safety_buffer
+            + c.additional_cost_one
+            + c.additional_cost_two
+        )
         if exposure_reasons(settings, exposure, capital):
             return False
         at = now()

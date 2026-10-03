@@ -26,10 +26,13 @@ from app.db import (
 )
 from app.demo import demo_books, demo_markets
 from app.domain import Book, Side, Venue, now
+from app.eligibility import refresh_account_evidence
 from app.pricing import BookIntegrityError
 from app.service import analysis_tick, paper_tick, rematch_all
+from app.shadow import shadow_tick
 from app.store import Store
 from app.telemetry import BOOKS, DISCOVERY, FAILURES, configure_logging
+from app.validation import validation_tick
 from app.venues.clients import InternationalClient, KalshiClient, USClient, VenueClient
 from app.venues.http import PublicHTTP, VenueError
 from app.venues.streams import international_stream, kalshi_stream, us_stream
@@ -171,7 +174,23 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
     reconnects = 0
     while True:
         markets = [x for x in await store.markets() if x.venue == client.venue and x.tradable]
-        markets.sort(key=lambda x: (not x.start_time_verified, x.start_time or now(), x.id))
+        from app.validation import validation_settings
+
+        validation, _, _ = await validation_settings(store)
+        watched = {
+            identifier
+            for match in await store.matches()
+            if match.id in validation.selected_match_ids
+            for identifier in (match.first_market_id, match.second_market_id)
+        }
+        markets.sort(
+            key=lambda x: (
+                x.id not in watched,
+                not x.start_time_verified,
+                x.start_time or now(),
+                x.id,
+            )
+        )
         markets = markets[: settings.max_monitored_markets]
         if not markets:
             await store.health(client.venue, feed="waiting_for_discovery", monitored=0)
@@ -273,6 +292,14 @@ async def market_data(store: Store, settings: Settings) -> None:
                 tasks.create_task(
                     guarded_loop(
                         store,
+                        "eligibility",
+                        lambda: refresh_account_evidence(store, http),
+                        300,
+                    )
+                )
+                tasks.create_task(
+                    guarded_loop(
+                        store,
                         "market-data",
                         discovery,
                         settings.discovery_interval_seconds,
@@ -320,7 +347,7 @@ async def maintenance_tick(store: Store) -> None:
 
 
 async def refresh_settlements(store: Store) -> None:
-    from app.db import OpportunityRow
+    from app.db import OpportunityRow, ShadowRow
     from app.domain import Opportunity
 
     markets = {market.id: market for market in await store.markets()}
@@ -334,6 +361,17 @@ async def refresh_settlements(store: Store) -> None:
             if row:
                 opportunity = Opportunity.model_validate(row.payload)
                 identifiers.update([opportunity.first_market_id, opportunity.second_market_id])
+        shadows = (
+            await session.scalars(
+                select(ShadowRow).where(
+                    ShadowRow.source == store.source,
+                    ShadowRow.state.in_(("HEDGED", "HEDGED_AFTER_UNWIND", "RESIDUAL_EXPOSURE")),
+                )
+            )
+        ).all()
+        for shadow in shadows:
+            signal = shadow.payload["validation"]
+            identifiers.update([signal["first_market_id"], signal["second_market_id"]])
     async with httpx.AsyncClient(follow_redirects=False) as http:
         transport = PublicHTTP(http, store.settings.request_rate)
         clients: dict[Venue, VenueClient] = {
@@ -377,6 +415,22 @@ async def role_runner(role: str, store: Store, settings: Settings) -> None:
             if role == "market-data":
                 tasks.create_task(market_data(store, settings))
             elif role == "analysis":
+                tasks.create_task(
+                    guarded_loop(
+                        store,
+                        "validation",
+                        lambda: validation_tick(store),
+                        settings.validation_interval_seconds,
+                    )
+                )
+                tasks.create_task(
+                    guarded_loop(
+                        store,
+                        "shadow",
+                        lambda: shadow_tick(store),
+                        0.5,
+                    )
+                )
                 tasks.create_task(
                     guarded_loop(
                         store,

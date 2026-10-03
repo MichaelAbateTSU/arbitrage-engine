@@ -1,0 +1,611 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
+import { z } from "zod";
+import { api, money, reason, time, useData } from "./api";
+import {
+  Badge,
+  DataTable,
+  ErrorBox,
+  JsonEvidence,
+  Loading,
+  Pagination,
+  Panel,
+  Reasons,
+} from "./components";
+import {
+  candidateSchema,
+  eligibilitySchema,
+  objectSchema,
+  page,
+  riskResponseSchema,
+  validationSettingsSchema,
+  validationSummarySchema,
+} from "./schemas";
+
+type Candidate = z.infer<typeof candidateSchema>;
+type Eligibility = z.infer<typeof eligibilitySchema>;
+type Settings = z.infer<typeof validationSettingsSchema>;
+
+export function Validation({
+  csrf,
+  onReview,
+}: {
+  csrf?: string;
+  onReview: (identifier: string) => void;
+}) {
+  const summary = useData("/validation/summary", validationSummarySchema);
+  const [filter, setFilter] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [selected, setSelected] = useState<Candidate | null>(null);
+  const query = useData(
+    `/validation/candidates?limit=50&offset=${offset}${filter ? `&reason=${encodeURIComponent(filter)}` : ""}`,
+    page(candidateSchema),
+  );
+  const columns: ColumnDef<Candidate>[] = [
+    {
+      id: "event",
+      header: "Pair / direction",
+      cell: ({ row }) => (
+        <button
+          className="event-link"
+          onClick={() => setSelected(row.original)}
+        >
+          <strong>{row.original.event || row.original.match_id}</strong>
+          <span>
+            Kalshi {row.original.first_outcome} + {row.original.second_venue}{" "}
+            {row.original.second_outcome}
+          </span>
+        </button>
+      ),
+    },
+    {
+      accessorKey: "approval_status",
+      header: "Approval",
+      cell: ({ row }) => (
+        <Badge
+          tone={
+            row.original.approval_status === "approved" ? "success" : "warning"
+          }
+        >
+          {row.original.approval_status}
+        </Badge>
+      ),
+    },
+    {
+      id: "prices",
+      header: "Depth-adjusted asks / BBO",
+      cell: ({ row }) => (
+        <span>
+          {row.original.calculation
+            ? `${row.original.calculation.price_one} / ${row.original.calculation.price_two}`
+            : "unknown"}
+          <small>
+            Best asks: {row.original.first_ask ?? "missing"} /{" "}
+            {row.original.second_ask ?? "missing"}
+          </small>
+        </span>
+      ),
+    },
+    { accessorKey: "available_quantity", header: "Available matched depth" },
+    {
+      id: "size",
+      header: "Priced contracts",
+      cell: ({ row }) => row.original.calculation?.quantity ?? "unknown",
+    },
+    {
+      id: "age",
+      header: "Book age ms",
+      cell: ({ row }) => (
+        <span>
+          {row.original.first_book_age_ms ?? "missing"} /{" "}
+          {row.original.second_book_age_ms ?? "missing"}
+        </span>
+      ),
+    },
+    {
+      id: "profit",
+      header: "Conditional net profit",
+      cell: ({ row }) => (
+        <span>{money(row.original.calculation?.net_profit)}</span>
+      ),
+    },
+    {
+      id: "reason",
+      header: "Blocking reasons",
+      cell: ({ row }) => (
+        <Reasons
+          reasons={[
+            ...new Set([
+              ...row.original.reasons,
+              ...row.original.execution_reasons,
+            ]),
+          ]}
+        />
+      ),
+    },
+  ];
+  if (summary.isPending) return <Loading />;
+  return (
+    <>
+      <ErrorBox error={summary.error ?? query.error} />
+      <Panel
+        title="Why did the candidates not qualify?"
+        subtitle="Counts are distinct pairs, not repeated observations. Price math never overrides missing settlement or eligibility evidence."
+      >
+        <div className="metrics">
+          {[
+            ["Candidate pairs", summary.data?.candidate_pairs],
+            ["Fresh directional diagnostics", summary.data?.fresh_diagnostics],
+            [
+              "Shadow-qualified directions",
+              summary.data?.shadow_qualified_directions,
+            ],
+            [
+              "Operator-executable directions",
+              summary.data?.operator_executable_directions,
+            ],
+          ].map(([label, value]) => (
+            <div className="metric" key={String(label)}>
+              <div className="metric-label">{label}</div>
+              <div className="metric-value">{value ?? 0}</div>
+            </div>
+          ))}
+        </div>
+        <div className="actions">
+          <select
+            aria-label="Validation rejection reason"
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setOffset(0);
+            }}
+          >
+            <option value="">All diagnostic directions</option>
+            {Object.entries(summary.data?.rejection_counts ?? {}).map(
+              ([code, count]) => (
+                <option key={code} value={code}>
+                  {reason(code)} ({count} pairs)
+                </option>
+              ),
+            )}
+          </select>
+          <span className="panel-note">
+            Updated {time(summary.data?.at)} UTC
+          </span>
+        </div>
+        <DataTable
+          rows={query.data?.items ?? []}
+          columns={columns}
+          empty="Diagnostics are collecting"
+        />
+        <Pagination
+          total={query.data?.total ?? 0}
+          offset={offset}
+          onChange={setOffset}
+        />
+      </Panel>
+      {selected && (
+        <Panel
+          title="Directional evidence"
+          action={
+            <button onClick={() => setSelected(null)}>Close detail</button>
+          }
+        >
+          <p>{selected.price_basis}</p>
+          <Reasons reasons={selected.reasons} />
+          <h3>Separate account/execution blockers</h3>
+          <Reasons reasons={selected.execution_reasons} />
+          <button
+            className="primary"
+            onClick={() => onReview(selected.match_id)}
+          >
+            Review settlement evidence
+          </button>
+          <JsonEvidence
+            title="Matched-size calculation and all consumed depth"
+            data={selected.calculation}
+          />
+          <JsonEvidence
+            title="Market-specific fees and additional-cost provenance"
+            data={selected.fee_evidence}
+          />
+          <SettlementMatrix value={selected.settlement_proof} />
+        </Panel>
+      )}
+      <Panel
+        title="Price access is not trading eligibility"
+        subtitle="US operator jurisdiction is not inferred from Render's cloud IP. International Polymarket is a different, US-close-only product."
+      >
+        <div className="health-cards">
+          {summary.data?.eligibility.map((value) => (
+            <EligibilityCard key={value.venue} value={value} csrf={csrf} />
+          ))}
+        </div>
+      </Panel>
+      <Panel
+        title="20-pair settlement review shortlist"
+        subtitle="Ranked by same-currency venue and observed depth. Selection is not approval. Unknown rules stay blocked."
+      >
+        {summary.data?.shortlist.map((value) => (
+          <div className="actions" key={value.match_id}>
+            <button
+              className="event-link"
+              onClick={() => onReview(value.match_id)}
+            >
+              <strong>{value.event || value.match_id}</strong>
+              <span>
+                {value.second_venue} · observed matched depth{" "}
+                {value.available_quantity}
+              </span>
+            </button>
+            <Badge tone={value.settlement_proof.proven ? "success" : "warning"}>
+              {value.settlement_proof.proven
+                ? "Scenario proof ready"
+                : "Evidence incomplete"}
+            </Badge>
+          </div>
+        ))}
+      </Panel>
+      {summary.data && (
+        <>
+          <Panel
+            title="7–14-day shadow diagnostic window"
+            subtitle="Never automatic permission to trade. Baseline and injected stress results are reported separately."
+          >
+            <div className="metrics">
+              {[
+                [
+                  "Distinct opportunity episodes",
+                  summary.data.distinct_opportunity_episodes,
+                ],
+                [
+                  "Repeated qualified observations",
+                  summary.data.qualified_observations,
+                ],
+                ["Baseline shadow trials", summary.data.shadow_baseline_trials],
+                [
+                  "Injected hedge-failure trials",
+                  summary.data.shadow_stress_trials,
+                ],
+              ].map(([label, value]) => (
+                <div className="metric" key={String(label)}>
+                  <div className="metric-label">{label}</div>
+                  <div className="metric-value">{value}</div>
+                </div>
+              ))}
+            </div>
+            <p>
+              Collected {Number(summary.data.elapsed_days).toFixed(2)} of{" "}
+              {summary.data.settings.diagnostic_days} days.
+            </p>
+            <p>
+              Baseline hypothetical net P&amp;L:{" "}
+              {money(summary.data.simulated_baseline_net_pnl)}. Stress
+              worst-case P&amp;L: {money(summary.data.stress_worst_case_pnl)}.
+            </p>
+            <p>
+              Capital lockup: {summary.data.capital_lockup_seconds} aggregate
+              trial-seconds ({summary.data.capital_weighted_lockup_usd_seconds}{" "}
+              USD-seconds). After operating costs:{" "}
+              {money(summary.data.profit_after_operating_cost)} (
+              {summary.data.operating_cost_status}).
+            </p>
+            <Reasons reasons={Object.keys(summary.data.shadow_states)} />
+            <JsonEvidence
+              title="Unsettled, observed-settlement and failed-hedge P&L separately"
+              data={summary.data.baseline_pnl_by_basis}
+            />
+            <p className="panel-note">{summary.data.limitation}</p>
+            <ShadowSettings
+              initial={summary.data.settings}
+              revision={summary.data.revision}
+              csrf={csrf}
+            />
+          </Panel>
+          <CostSettings csrf={csrf} />
+        </>
+      )}
+    </>
+  );
+}
+
+export function SettlementMatrix({
+  value,
+}: {
+  value: Candidate["settlement_proof"];
+}) {
+  return (
+    <div>
+      <h3>Combined payouts by scenario</h3>
+      <Badge tone={value.proven ? "success" : "warning"}>
+        {value.proven ? "Normalized coverage proven" : "Coverage not proven"}
+      </Badge>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Kalshi direction</th>
+              <th>Scenario</th>
+              <th>Combined payout</th>
+              <th>Covered</th>
+            </tr>
+          </thead>
+          <tbody>
+            {value.scenarios.map((row) => (
+              <tr key={`${row.direction}:${row.scenario}`}>
+                <td>{row.direction}</td>
+                <td>{row.scenario}</td>
+                <td>{row.combined_payout ?? "unknown"}</td>
+                <td>{row.covered ? "Yes" : "No"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <JsonEvidence
+        title="Deadlines, resolution policies and exact rule-version proof"
+        data={value}
+      />
+    </div>
+  );
+}
+
+function EligibilityCard({
+  value,
+  csrf,
+}: {
+  value: Eligibility;
+  csrf?: string;
+}) {
+  const [evidence, setEvidence] = useState("");
+  const [checks, setChecks] = useState({
+    jurisdiction_confirmed: false,
+    kyc_confirmed: false,
+    order_permission_confirmed: false,
+    market_restrictions_reviewed: false,
+  });
+  const [error, setError] = useState<Error | null>(null);
+  const [busy, setBusy] = useState(false);
+  const client = useQueryClient();
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/validation/eligibility/${value.venue}`, eligibilitySchema, {
+        method: "PUT",
+        headers: { "X-CSRF-Token": csrf ?? "" },
+        body: JSON.stringify({
+          ...checks,
+          evidence,
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        }),
+      });
+      await client.invalidateQueries();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught
+          : new Error("Eligibility attestation failed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="rules-card">
+      <h3>{value.product.name}</h3>
+      <p>
+        {value.product.market_api} · operator {value.operator_country}/
+        {value.operator_region}
+      </p>
+      <p>
+        Prices: {value.price_access}. Account read: {value.account_read_access}.
+        Order permission: {value.order_permission}. Jurisdiction:{" "}
+        {value.jurisdiction_status}.
+      </p>
+      <p>
+        Available account buying power: {money(value.available_balance)}.
+        Observed {time(value.balance_observed_at)} UTC. This is not
+        KYC/order-permission proof.
+      </p>
+      <Reasons reasons={value.reasons} />
+      <details>
+        <summary>
+          Independent account eligibility attestation (expires after 7 days)
+        </summary>
+        {Object.entries(checks).map(([key, checked]) => (
+          <label key={key}>
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(event) =>
+                setChecks({
+                  ...checks,
+                  [key]: event.target.checked,
+                })
+              }
+            />
+            {reason(key)}
+          </label>
+        ))}
+        <label>
+          Evidence reference; never paste credentials
+          <textarea
+            value={evidence}
+            onChange={(event) => setEvidence(event.target.value)}
+          />
+        </label>
+        <ErrorBox error={error} />
+        <button
+          disabled={
+            !csrf ||
+            busy ||
+            !evidence.trim() ||
+            value.jurisdiction_status === "close_only"
+          }
+          onClick={() => void save()}
+        >
+          Save audited attestation
+        </button>
+      </details>
+    </div>
+  );
+}
+
+function ShadowSettings({
+  initial,
+  revision,
+  csrf,
+}: {
+  initial: Settings;
+  revision: number;
+  csrf?: string;
+}) {
+  const [settings, setSettings] = useState(JSON.stringify(initial, null, 2));
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<Error | null>(null);
+  const [busy, setBusy] = useState(false);
+  const client = useQueryClient();
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const parsed: unknown = JSON.parse(settings);
+      const value = validationSettingsSchema.parse(parsed);
+      await api("/validation/configuration", objectSchema, {
+        method: "PUT",
+        headers: { "X-CSRF-Token": csrf ?? "" },
+        body: JSON.stringify({ revision, settings: value, reason: note }),
+      });
+      await client.invalidateQueries();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught
+          : new Error("Shadow configuration failed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <details>
+      <summary>
+        Audited virtual-balance, failure-model and operating-cost settings
+      </summary>
+      <p>
+        Changes affect hypothetical trials only. Keep the original
+        profit/freshness thresholds.
+      </p>
+      <label>
+        Shadow settings JSON
+        <textarea
+          rows={12}
+          value={settings}
+          onChange={(event) => setSettings(event.target.value)}
+        />
+      </label>
+      <label>
+        Change reason{" "}
+        <input value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+      <ErrorBox error={error} />
+      <button
+        disabled={!csrf || busy || !note.trim()}
+        onClick={() => void save()}
+      >
+        Save shadow settings
+      </button>
+    </details>
+  );
+}
+
+function CostSettings({ csrf }: { csrf?: string }) {
+  const risk = useData("/settings/risk", riskResponseSchema);
+  const [costs, setCosts] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<Error | null>(null);
+  const [busy, setBusy] = useState(false);
+  const client = useQueryClient();
+  async function save() {
+    if (!risk.data) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const parsed: unknown = JSON.parse(costs);
+      const extra = z
+        .record(
+          z.string(),
+          z.object({
+            verified: z.boolean(),
+            settlement_per_contract: z.string(),
+            rebalancing_per_contract: z.string(),
+            fixed_per_leg: z.string(),
+            evidence: z.string(),
+          }),
+        )
+        .parse(parsed);
+      await api("/settings/risk", riskResponseSchema, {
+        method: "PUT",
+        headers: { "X-CSRF-Token": csrf ?? "" },
+        body: JSON.stringify({
+          revision: risk.data.revision,
+          settings: { ...risk.data.settings, additional_costs: extra },
+          reason: note,
+        }),
+      });
+      await client.invalidateQueries();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught : new Error("Cost assumptions failed"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Panel
+      title="Verify additional costs before calling a spread profitable"
+      subtitle="Unknown settlement/rebalancing costs block qualification. Zero costs need evidence too."
+    >
+      <p>
+        Per-venue JSON fields: verified, settlement_per_contract,
+        rebalancing_per_contract, fixed_per_leg, evidence. Monetary values must
+        be decimal strings.
+      </p>
+      <label>
+        Cost assumptions JSON
+        <textarea
+          rows={8}
+          value={costs}
+          placeholder={JSON.stringify(
+            {
+              kalshi: {
+                verified: false,
+                settlement_per_contract: "0",
+                rebalancing_per_contract: "0",
+                fixed_per_leg: "0",
+                evidence: "",
+              },
+            },
+            null,
+            2,
+          )}
+          onChange={(event) => setCosts(event.target.value)}
+        />
+      </label>
+      <label>
+        Change reason{" "}
+        <input value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+      <ErrorBox error={error ?? risk.error} />
+      <button
+        disabled={!csrf || busy || !note.trim()}
+        onClick={() => void save()}
+      >
+        Save verified cost evidence
+      </button>
+    </Panel>
+  );
+}

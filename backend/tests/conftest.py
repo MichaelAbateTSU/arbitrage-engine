@@ -38,7 +38,12 @@ def opportunity(scenario) -> Opportunity:
 @pytest.fixture
 async def store(tmp_path) -> AsyncIterator[Store]:
     settings = Settings(
+        _env_file=None,
         environment="test",
+        kalshi_api_key=None,
+        kalshi_private_key=None,
+        polymarket_us_key_id=None,
+        polymarket_us_secret_key=None,
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}",
         admin_password_hash=SecretStr(PasswordHasher().hash(TEST_PASSWORD)),
         session_secret=SecretStr("test-only-session-secret-at-least-32-characters"),
@@ -49,7 +54,7 @@ async def store(tmp_path) -> AsyncIterator[Store]:
         await connection.execute(
             text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         )
-        await connection.execute(text("INSERT INTO alembic_version VALUES ('efb2041d5699')"))
+        await connection.execute(text("INSERT INTO alembic_version VALUES ('6e9f3a2c7d10')"))
     result = Store(sessions, settings)
     await result.initialize()
     for market in demo_markets():

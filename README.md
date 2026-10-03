@@ -21,10 +21,13 @@ paper results are not guaranteed profit, actual earnings, or legal eligibility.
   six sizing modes and reproducible inputs.
 - Persisted, idempotent, latency-delayed paper intents; partial and one-sided
   fills; conservative liquidity haircut; separate locked and settlement results.
-- Seven responsive dark dashboard pages, authenticated operator controls, secure
+- Eight responsive dark dashboard pages, authenticated operator controls, secure
   sessions, CSRF, rate limiting, revision checks, SSE, alerts and health.
 - PostgreSQL/Alembic, durable worker leases, restart recovery, retention, daily
   reports and retained-book replay with version provenance.
+- Opportunity validation: every pair's two-direction blockers, independent
+  settlement review, exact account-read versus order-permission status,
+  additional-cost evidence, distinct episodes and delayed shadow failure trials.
 
 ```mermaid
 flowchart LR
@@ -107,9 +110,32 @@ See `.env.example`. Important settings:
 | `POLYMARKET_US_KEY_ID`, `POLYMARKET_US_SECRET_KEY` | Optional US **market-data** WebSocket credentials |
 | `MAX_MONITORED_MARKETS=80` | Per-venue bounded pricing universe; discovery remains paginated |
 | `REQUEST_RATE=5` | Shared public request pacing; maximum supported value 10 |
+| `OPERATOR_COUNTRY=US`, `OPERATOR_REGION=GA` | Operator jurisdiction, never inferred from the worker's cloud IP |
+| `VALIDATION_INTERVAL_SECONDS=10` | Independent all-gate candidate diagnostics |
 
 Blank credentials are safe. Public HTTP scanning does not require execution keys.
 International access is read-only; no VPN/proxy/geographic-restriction evasion.
+The market-data worker also performs signed **GET-only** Kalshi and Polymarket US
+buying-power checks. A successful check does not establish KYC, order permission
+or market-specific eligibility. International Polymarket is US close-only.
+
+## Opportunity-validation pilot
+
+Keep the global paper kill switch active and open **Opportunity validation**.
+Review the selected 10-20 pairs, exact contract evidence and scenario payouts.
+Public-source shadow candidates require independent, hash-bound human review;
+clicking approval cannot override missing or incompatible rules. Record verified
+settlement/rebalancing costs separately from venue fees, and document eligibility
+without pasting credentials. Do not lower profitability or freshness thresholds.
+
+The independent shadow engine uses virtual balances, $25-per-leg default caps,
+delayed fresh books and lot-valid partial fills. Injected second-leg failures
+and delayed bid-side unwinds are labeled stress, not observed exchange events.
+Held hedge/residual capital remains reserved until final settlement. The
+dashboard separates unsettled, observed-settlement and failed-hedge results;
+operating costs remain unverified until evidenced. Seven to fourteen days is an
+initial diagnostic window, not automatic permission to trade; zero qualified
+episodes is a valid finding.
 
 ## Validation
 

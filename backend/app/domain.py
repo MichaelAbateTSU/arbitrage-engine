@@ -238,7 +238,28 @@ class Match(Model):
     version: str = "deterministic-v1"
 
 
+class AdditionalCosts(Model):
+    verified: bool = False
+    settlement_per_contract: Nonnegative = D("0")
+    rebalancing_per_contract: Nonnegative = D("0")
+    fixed_per_leg: Nonnegative = D("0")
+    evidence: str = Field(default="", max_length=4000)
+
+    @model_validator(mode="after")
+    def evidence_required(self) -> "AdditionalCosts":
+        if self.verified and not self.evidence.strip():
+            raise ValueError("Additional-cost verification requires evidence")
+        return self
+
+    def total(self, quantity: Decimal) -> Decimal:
+        return (
+            quantity * (self.settlement_per_contract + self.rebalancing_per_contract)
+            + self.fixed_per_leg
+        )
+
+
 class RiskSettings(Model):
+    additional_costs: dict[Venue, AdditionalCosts] = Field(default_factory=dict)
     allow_usdc_parity_assumption: bool = False
     max_contracts: int = Field(default=10000, ge=1, le=100000)
     max_per_venue: Positive = D("500")
@@ -304,6 +325,8 @@ class Calculation(Model):
     fee_two: Nonnegative
     slippage: Nonnegative
     safety_buffer: Nonnegative
+    additional_cost_one: Nonnegative = D("0")
+    additional_cost_two: Nonnegative = D("0")
     payout: Positive
     gross_profit: Decimal
     net_profit: Decimal

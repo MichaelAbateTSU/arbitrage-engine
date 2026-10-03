@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-test("demo dashboard, guarded paper lifecycle and all seven pages", async ({
+test("demo dashboard, guarded paper lifecycle and validation phase", async ({
   page,
 }) => {
   await page.goto("/");
@@ -29,6 +29,32 @@ test("demo dashboard, guarded paper lifecycle and all seven pages", async ({
     .fill(process.env.E2E_PASSWORD ?? "");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Opportunity validation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Why did the candidates not qualify?",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("US operator jurisdiction is not inferred", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "7–14-day shadow diagnostic window",
+    }),
+  ).toBeVisible();
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Enable paper simulation" }).click();
   await page.getByRole("button", { name: "Enable paper only" }).click();
@@ -70,6 +96,7 @@ test("demo dashboard, guarded paper lifecycle and all seven pages", async ({
   await page
     .getByLabel("Review note")
     .fill("E2E operator review of synthetic fixture");
+  await page.getByLabel(/I independently verified the combined payout/).check();
   await page.getByRole("button", { name: "Approve verified pair" }).click();
   await page.getByText("Review audit history", { exact: true }).click();
   await expect(

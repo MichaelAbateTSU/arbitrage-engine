@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import ROUND_FLOOR, Decimal
 
 from app.domain import (
+    AdditionalCosts,
     Book,
     Calculation,
     D,
@@ -44,14 +45,16 @@ def calculate(
         f1, f2 = fee(one, a.fee), fee(two, b.fee)
         slip = (c1 + c2) * settings.slippage_bps / 10000
         buffer = (c1 + c2) * settings.latency_buffer_bps / 10000
-        capital = c1 + c2 + f1 + f2 + slip + buffer
-        if c1 + f1 + slip / 2 + buffer / 2 > per_venue:
+        extra_one = settings.additional_costs.get(a.venue, AdditionalCosts()).total(q)
+        extra_two = settings.additional_costs.get(b.venue, AdditionalCosts()).total(q)
+        capital = c1 + c2 + f1 + f2 + slip + buffer + extra_one + extra_two
+        if c1 + f1 + slip / 2 + buffer / 2 + extra_one > per_venue:
             break
-        if c2 + f2 + slip / 2 + buffer / 2 > per_venue or capital > total_limit:
+        if c2 + f2 + slip / 2 + buffer / 2 + extra_two > per_venue or capital > total_limit:
             break
         if c1 < a.minimum_notional or c2 < b.minimum_notional or c1 + c2 == 0:
             continue
-        profit = q - c1 - c2 - f1 - f2 - slip - buffer
+        profit = q - capital
         result = Calculation(
             quantity=q,
             cost_one=c1,
@@ -64,12 +67,14 @@ def calculate(
             fee_two=f2,
             slippage=slip,
             safety_buffer=buffer,
+            additional_cost_one=extra_one,
+            additional_cost_two=extra_two,
             payout=q,
             gross_profit=q - c1 - c2,
             net_profit=profit,
             net_return=profit / (c1 + c2),
-            unused_one=per_venue - c1 - f1 - slip / 2 - buffer / 2,
-            unused_two=per_venue - c2 - f2 - slip / 2 - buffer / 2,
+            unused_one=per_venue - c1 - f1 - slip / 2 - buffer / 2 - extra_one,
+            unused_two=per_venue - c2 - f2 - slip / 2 - buffer / 2 - extra_two,
             binding_constraint="DEPTH_OR_CAPITAL",
             consumed_one=one,
             consumed_two=two,
@@ -157,6 +162,11 @@ def detect(
         failures.append("VENUE_KILL_SWITCH")
     if not a.fee.known_at(instant) or not b.fee.known_at(instant):
         failures.append("UNKNOWN_FEE")
+    if a.source == "public" and any(
+        not settings.additional_costs.get(venue, AdditionalCosts()).verified
+        for venue in (a.venue, b.venue)
+    ):
+        failures.append("ADDITIONAL_COSTS_UNVERIFIED")
     if exposure and exposure.cooldown_until and instant < exposure.cooldown_until:
         failures.append("EXECUTION_COOLDOWN")
     opportunities: list[Opportunity] = []
@@ -196,6 +206,8 @@ def detect(
             + result.fee_two
             + result.slippage
             + result.safety_buffer
+            + result.additional_cost_one
+            + result.additional_cost_two
         )
         if exposure:
             reasons += exposure_reasons(settings, exposure, capital)

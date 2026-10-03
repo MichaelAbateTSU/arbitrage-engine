@@ -29,6 +29,7 @@ from app.db import (
     SnapshotRow,
     SpecificationRow,
     SystemEventRow,
+    ValidationConfigRow,
     WorkerRow,
 )
 from app.domain import (
@@ -106,6 +107,18 @@ class Store:
                 .on_conflict_do_nothing(index_elements=["id"])
             )
             risk = RiskSettings(kill_switch=self.settings.global_kill_switch)
+            from app.validation import ValidationSettings
+
+            await session.execute(
+                insert(ValidationConfigRow)
+                .values(
+                    id=self.source,
+                    source=self.source,
+                    revision=1,
+                    payload=ValidationSettings().model_dump(mode="json"),
+                )
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
             await session.execute(
                 insert(RiskRow)
                 .values(

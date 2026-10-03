@@ -19,6 +19,7 @@ import {
   Download,
 } from "lucide-react";
 import { z } from "zod";
+import { Validation } from "./Validation";
 import { api, money, percent, time, useData } from "./api";
 import {
   Badge,
@@ -55,6 +56,7 @@ import {
 const pages = [
   ["Overview", Gauge],
   ["Opportunities", Radio],
+  ["Opportunity validation", ShieldCheck],
   ["Market matching", Layers3],
   ["Paper trading", FileSearch],
   ["Analytics", BarChart3],
@@ -97,6 +99,7 @@ export function App() {
   const [loginError, setLoginError] = useState<Error | null>(null);
   const [connection, setConnection] = useState("connecting");
   const [busy, setBusy] = useState(false);
+  const [reviewMatch, setReviewMatch] = useState<string | null>(null);
   const config = useData("/system/configuration", configSchema);
   const session = useData("/auth/session", sessionSchema);
   const client = useQueryClient();
@@ -247,6 +250,8 @@ export function App() {
                     "From apparent price gaps to evidence-backed opportunities.",
                   Opportunities:
                     "Executable depth, verified rules, and conservative costs.",
+                  "Opportunity validation":
+                    "Explain every blocker, prove scenario coverage, and measure distinct shadow episodes.",
                   "Market matching":
                     "Economic equivalence is a requirement, never an assumption.",
                   "Paper trading":
@@ -272,7 +277,18 @@ export function App() {
           <ErrorBox error={config.error ?? loginError} />
           {current === "Overview" && <Overview />}
           {current === "Opportunities" && <Opportunities />}
-          {current === "Market matching" && <Matching csrf={csrf} />}
+          {current === "Opportunity validation" && (
+            <Validation
+              csrf={csrf}
+              onReview={(identifier) => {
+                setReviewMatch(identifier);
+                setCurrent("Market matching");
+              }}
+            />
+          )}
+          {current === "Market matching" && (
+            <Matching csrf={csrf} initialMatch={reviewMatch} />
+          )}
           {current === "Paper trading" && <Paper csrf={csrf} />}
           {current === "Analytics" && <Analytics />}
           {current === "System health" && <Health />}
@@ -725,10 +741,16 @@ function RulesView({ market }: { market: Market }) {
   );
 }
 
-function Matching({ csrf }: { csrf?: string }) {
+function Matching({
+  csrf,
+  initialMatch,
+}: {
+  csrf?: string;
+  initialMatch?: string | null;
+}) {
   const [status, setStatus] = useState("");
   const [offset, setOffset] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialMatch ?? null);
   const query = useData(
     `/matches?limit=50&offset=${offset}${status ? `&status=${status}` : ""}`,
     page(matchSchema),
@@ -823,6 +845,7 @@ function MatchReview({
 }) {
   const data = useData(`/matches/${identifier}`, matchDetailSchema);
   const [note, setNote] = useState("");
+  const [scenarioAcknowledged, setScenarioAcknowledged] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
   const client = useQueryClient();
@@ -838,6 +861,7 @@ function MatchReview({
           expected_first_rules_hash: data.data.first_rules_hash,
           expected_second_rules_hash: data.data.second_rules_hash,
           note,
+          scenario_coverage_acknowledged: scenarioAcknowledged,
         }),
       });
       await client.invalidateQueries();
@@ -860,6 +884,19 @@ function MatchReview({
         Unknown fields must be documented before approval. Known
         incompatibilities cannot be overridden by this button.
       </p>
+      <JsonEvidence
+        title="Scenario payout coverage, deadlines and resolution proof"
+        data={data.data.settlement_proof}
+      />
+      <label>
+        <input
+          type="checkbox"
+          checked={scenarioAcknowledged}
+          onChange={(event) => setScenarioAcknowledged(event.target.checked)}
+        />
+        I independently verified the combined payout for every relevant scenario
+        and the source evidence.
+      </label>
       <label>
         Review note
         <textarea value={note} onChange={(e) => setNote(e.target.value)} />
@@ -868,7 +905,7 @@ function MatchReview({
       <div className="actions">
         <button
           className="primary"
-          disabled={!csrf || busy}
+          disabled={!csrf || busy || !scenarioAcknowledged || !note.trim()}
           onClick={() => void review("approve")}
         >
           Approve verified pair

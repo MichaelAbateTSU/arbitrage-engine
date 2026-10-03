@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import ROUND_FLOOR
 
 from app.domain import (
+    AdditionalCosts,
     Book,
     D,
     Market,
@@ -55,7 +56,8 @@ def simulate_leg(book: Book, market: Market, trade: PaperTrade, limit: D) -> Pap
     if value < market.minimum_notional:
         return PaperFill()
     fees = fee(levels, market.fee)
-    if value + fees > trade.settings.max_per_venue:
+    extra = trade.settings.additional_costs.get(market.venue, AdditionalCosts()).total(q)
+    if value + fees + extra > trade.settings.max_per_venue:
         return PaperFill()
     return PaperFill(quantity=q, cost=value, fee=fees, price=value / q, consumed=levels)
 
@@ -138,6 +140,14 @@ def evaluate_paper(
     trade.fill_at = instant
     trade.unhedged_quantity = abs(trade.first.quantity - trade.second.quantity)
     total_cost = trade.first.cost + trade.second.cost + trade.first.fee + trade.second.fee
+    total_cost += sum(
+        (
+            trade.settings.additional_costs.get(market.venue, AdditionalCosts()).total(leg.quantity)
+            for market, leg in ((a, trade.first), (b, trade.second))
+            if leg.quantity
+        ),
+        D("0"),
+    )
     slip = (trade.first.cost + trade.second.cost) * trade.settings.slippage_bps / 10000
     if trade.unhedged_quantity:
         transition(trade, PaperState.UNHEDGED, instant)
@@ -160,6 +170,14 @@ def settle(trade: PaperTrade, opportunity: Opportunity, a: Market, b: Market, at
     two = b.result if opportunity.second_outcome == Side.YES else 1 - b.result
     payout = trade.first.quantity * one + trade.second.quantity * two
     costs = trade.first.cost + trade.second.cost + trade.first.fee + trade.second.fee
+    costs += sum(
+        (
+            trade.settings.additional_costs.get(market.venue, AdditionalCosts()).total(leg.quantity)
+            for market, leg in ((a, trade.first), (b, trade.second))
+            if leg.quantity
+        ),
+        D("0"),
+    )
     trade.settlement_profit = payout - costs
     trade.settlement_at = at
     transition(trade, PaperState.SETTLED, at)

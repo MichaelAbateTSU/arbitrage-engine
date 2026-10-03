@@ -1,8 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Badge, DataTable, Empty, ErrorBox, Reasons } from "../src/components";
-import { decimal, opportunitySchema, riskSchema } from "../src/schemas";
+import {
+  decimal,
+  eligibilitySchema,
+  opportunitySchema,
+  riskSchema,
+} from "../src/schemas";
 import { money, percent, time } from "../src/api";
+import { SettlementMatrix } from "../src/Validation";
 
 describe("fail-closed client schemas", () => {
   it("rejects floating point financial responses", () => {
@@ -16,6 +22,39 @@ describe("fail-closed client schemas", () => {
   });
   it("rejects an empty supported universe", () => {
     expect(riskSchema.safeParse({ supported_leagues: [] }).success).toBe(false);
+  });
+  it("rejects invalid eligibility, float buying power and enabled live execution", () => {
+    const value = {
+      venue: "polymarket_us",
+      product: { name: "Polymarket US" },
+      operator_country: "US",
+      operator_region: "GA",
+      price_access: "connected",
+      account_read_access: "verified",
+      order_permission: "unverified",
+      jurisdiction_status: "unknown",
+      open_order_eligible: false,
+      available_balance: "17.123456789",
+      balance_observed_at: "2026-10-03T03:00:00Z",
+      reasons: ["ORDER_PERMISSION_UNVERIFIED"],
+      probe_error: null,
+      live_execution_available: false,
+    };
+    expect(eligibilitySchema.safeParse(value).success).toBe(true);
+    expect(
+      eligibilitySchema.safeParse({ ...value, available_balance: 17.12 })
+        .success,
+    ).toBe(false);
+    expect(
+      eligibilitySchema.safeParse({
+        ...value,
+        order_permission: "verified_by_prices",
+      }).success,
+    ).toBe(false);
+    expect(
+      eligibilitySchema.safeParse({ ...value, live_execution_available: true })
+        .success,
+    ).toBe(false);
   });
 });
 describe("dashboard evidence and states", () => {
@@ -43,5 +82,26 @@ describe("dashboard evidence and states", () => {
     expect(screen.getByText("<script>alert(1)</script>")).toBeVisible();
     render(<Empty title="No signals" />);
     expect(screen.getByText("No signals")).toBeVisible();
+  });
+  it("does not label an unknown settlement scenario as covered", () => {
+    render(
+      <SettlementMatrix
+        value={{
+          proven: false,
+          reasons: ["UNKNOWN_CANCELLATION"],
+          scenarios: [
+            {
+              direction: "YES",
+              scenario: "cancelled_or_void",
+              combined_payout: null,
+              covered: false,
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("Coverage not proven")).toBeVisible();
+    expect(screen.getByText("unknown")).toBeVisible();
+    expect(screen.getByText("No", { exact: true })).toBeVisible();
   });
 });

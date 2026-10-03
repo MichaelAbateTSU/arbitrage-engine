@@ -146,6 +146,37 @@ class RiskRow(Record, Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
 
 
+class EligibilityRow(Record, Base):
+    __tablename__ = "validation_eligibility"
+    venue: Mapped[str] = mapped_column(String(32), index=True)
+    __table_args__ = (UniqueConstraint("source", "venue"),)
+
+
+class ValidationRow(Record, Base):
+    __tablename__ = "candidate_validations"
+    match_id: Mapped[str] = mapped_column(String(160), index=True)
+    direction: Mapped[str] = mapped_column(String(8))
+
+
+class EpisodeRow(Record, Base):
+    __tablename__ = "validation_episodes"
+    match_id: Mapped[str] = mapped_column(String(160), index=True)
+    direction: Mapped[str] = mapped_column(String(8))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ShadowRow(Record, Base):
+    __tablename__ = "shadow_trials"
+    episode_id: Mapped[str] = mapped_column(String(160), index=True)
+    state: Mapped[str] = mapped_column(String(32), index=True)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class ValidationConfigRow(Record, Base):
+    __tablename__ = "validation_configuration"
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+
+
 class AuditRow(Record, Base):
     __tablename__ = "audit_events"
     actor: Mapped[str] = mapped_column(String(64))

@@ -246,7 +246,8 @@ eligibility and legal geography before commercial distribution.
 - International streams do not provide provable sequence continuity; periodic
   snapshots/reconnects help but do not create an exchange guarantee.
 - Queue-observed fill inference, external email/webhook delivery, commercial
-  billing, production LLM providers and private account/order APIs are not enabled.
+  billing, production LLM providers and private order APIs are not enabled.
+  GET-only account evidence is implemented by the validation extension below.
 - Scalar settlement fees outside supported fixed binary/refund payouts need
   reconciliation. Changes to an already-final payout need operator investigation.
 - USDC parity, chain/redemption/transfer costs and venue/commercial/legal
@@ -311,3 +312,41 @@ Paid services continue independently of the local terminal or this agent session
 Operator settlement-equivalence review and risk acknowledgements remain mandatory;
 190 candidate matches are not 190 validated arbitrages. Real trading is unavailable.
 The plan, research, runbooks, safeguards and deployment steps are linked from README.
+
+## 22. Opportunity-validation extension
+
+Implemented an eighth **Opportunity validation** dashboard and independent
+analysis loops. Both directions are diagnosed despite unapproved matches,
+with settlement scenario matrices, current rule hashes, depth-adjusted asks,
+priced contracts, ages, fees, evidenced additional costs and all blockers.
+The persisted 10-20-pair review watchlist prioritizes same-currency observed
+depth; selection does not approve contracts.
+
+Market-data credentials support signed **GET-only** buying-power evidence.
+Product identity, market connectivity, account-read access, jurisdiction,
+KYC, market-specific restrictions and order permission are separate facts.
+International Polymarket remains US close-only; cloud geography cannot bypass it.
+Public shadow candidates require independent hash-bound human review and verified
+costs, even when ordinary paper risk does not require human review.
+
+Persistent shadow trials use delayed fresh books, protected limits and lot-valid
+partial fills. Baseline, injected second-leg rejection and injected partial fill
+are separate evidence. Emergency unwinds use bid-side depth and current fees;
+remaining hedge/residual capital stays reserved until final public settlement.
+Virtual wallets conservatively reserve the combined cap on each participating
+venue, aggregate Kalshi exposure across both products, and deduct realized losses.
+Restart idempotency and current operator rejections are respected.
+
+Reports distinguish distinct episodes from repeated observations, baseline from
+stress, unsettled from observed-settlement/failed-hedge P&L, aggregate seconds
+from capital-weighted USD-seconds, and evidenced from unknown operating costs.
+The configured 7-14-day window is diagnostic only. No profitable edge or
+automatic permission to trade is claimed.
+
+Local verification includes **101 backend tests passed**, one optional PostgreSQL
+test skipped in that run, the dedicated PostgreSQL regression passed separately,
+Alembic upgrade/drift/downgrade/re-upgrade checks on isolated PostgreSQL 17,
+**9 frontend component/schema tests** and authenticated eight-page Chromium/WCAG checks,
+types/lints/build and Render Blueprint invariants. Migration revision is
+`6e9f3a2c7d10`. Production rollout and real shortlist observations are recorded
+separately after deployment; the earlier cloud numbers are historical snapshots.

@@ -45,7 +45,11 @@ async def main():
         for role in ("market-data", "analysis", "maintenance")
     ]
     server = uvicorn.Server(
-        uvicorn.Config(create_app(settings), host="127.0.0.1", port=8000)
+        uvicorn.Config(
+            create_app(settings),
+            host="127.0.0.1",
+            port=int(os.environ.get("DEMO_PORT", "8000")),
+        )
     )
 
     def worker_finished(task):

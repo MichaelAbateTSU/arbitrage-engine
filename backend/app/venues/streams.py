@@ -50,14 +50,14 @@ def kalshi_headers(settings: Settings, path: str = "/trade-api/ws/v2") -> dict[s
     }
 
 
-def us_headers(settings: Settings) -> dict[str, str]:
+def us_headers(settings: Settings, path: str = "/v1/ws/markets") -> dict[str, str]:
     if not settings.polymarket_us_key_id or not settings.polymarket_us_secret_key:
         raise VenueError("US_STREAM_CREDENTIALS_REQUIRED")
     key = ed25519.Ed25519PrivateKey.from_private_bytes(
         base64.b64decode(settings.polymarket_us_secret_key.get_secret_value(), validate=True)[:32]
     )
     timestamp = str(int(time.time() * 1000))
-    signature = key.sign(f"{timestamp}GET/v1/ws/markets".encode())
+    signature = key.sign(f"{timestamp}GET{path}".encode())
     return {
         "X-PM-Access-Key": settings.polymarket_us_key_id.get_secret_value(),
         "X-PM-Timestamp": timestamp,

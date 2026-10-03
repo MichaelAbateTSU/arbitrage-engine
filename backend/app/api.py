@@ -58,6 +58,7 @@ class Review(Model):
     expected_first_rules_hash: str
     expected_second_rules_hash: str
     note: str = Query(default="", max_length=4000)
+    scenario_coverage_acknowledged: bool = False
 
 
 class RiskUpdate(Model):
@@ -293,6 +294,8 @@ async def matches(
 
 @router.get("/matches/{identifier}")
 async def match_detail(request: Request, identifier: str) -> dict[str, Any]:
+    from app.validation import settlement_proof
+
     store: Store = request.app.state.store
     match = Match.model_validate(await get_payload(store, MatchRow, identifier))
     reviews = await record_page(store, ReviewRow, 100, 0, [ReviewRow.match_id == identifier])
@@ -305,6 +308,7 @@ async def match_detail(request: Request, identifier: str) -> dict[str, Any]:
         "first_rules_hash": Market.model_validate(a).rules_hash,
         "second_rules_hash": Market.model_validate(b).rules_hash,
         "reviews": reviews.items,
+        "settlement_proof": settlement_proof(Market.model_validate(a), Market.model_validate(b)),
     }
 
 
@@ -338,6 +342,16 @@ async def review_match(
             raise HTTPException(
                 422, {"code": "DETERMINISTIC_GATES_FAILED", "reasons": match.reasons}
             )
+        if action == "approve":
+            from app.validation import settlement_proof
+
+            proof = settlement_proof(a, b)
+            if (
+                not body.scenario_coverage_acknowledged
+                or not proof["proven"]
+                or not body.note.strip()
+            ):
+                raise HTTPException(422, "SETTLEMENT_SCENARIO_REVIEW_AND_NOTE_REQUIRED")
         if action == "reject":
             match.status = "rejected"
             match.reasons = ["HUMAN_REJECTED"]
@@ -349,7 +363,12 @@ async def review_match(
                 source=store.source,
                 match_id=identifier,
                 actor=actor,
-                payload={"action": action, "note": body.note, "at": now().isoformat()},
+                payload={
+                    "action": action,
+                    "note": body.note,
+                    "at": now().isoformat(),
+                    "scenario_coverage_acknowledged": body.scenario_coverage_acknowledged,
+                },
             )
         )
         audit(
