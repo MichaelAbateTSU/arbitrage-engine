@@ -575,3 +575,15 @@ async def test_worker_command_timeout_is_reported_before_retry(store, monkeypatc
         )
         assert row.payload["error_code"] == "TimeoutError"
     assert calls == ["action"]
+
+
+async def test_empty_paper_and_shadow_ticks_do_not_read_the_market_universe(store, monkeypatch):
+    from app.service import paper_tick
+
+    async def forbidden_read(*args):
+        pytest.fail("No active simulation or episode needs market/book reads")
+
+    monkeypatch.setattr(store, "markets", forbidden_read)
+    monkeypatch.setattr(store, "books", forbidden_read)
+    await paper_tick(store)
+    await shadow_tick(store)

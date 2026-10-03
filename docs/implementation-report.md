@@ -545,6 +545,14 @@ only its uncommitted diagnostics. PostgreSQL app connections now have build/sour
 identity and bounded command, statement, lock and idle-transaction deadlines;
 worker command timeouts are explicitly reported before retry. A real PostgreSQL
 regression checks lock-timeout rollback and the subsequent successful attempt.
+After recovery, remaining load was reduced at the high-rate consumers: empty paper
+and shadow ticks no longer read the entire market/book universe, and detection
+reads only markets/books referenced by current matches. Active paper handling,
+shadow unwind/settlement and qualification checks remain unchanged.
+The cloud verifier also samples book freshness immediately after reading books,
+after its larger diagnostic report, and publishes both capture times. This avoids
+aging its own snapshot through unrelated report queries; original exchange/receipt
+timestamps and the production freshness threshold are unchanged.
 
 The NBA US sample uses two calendar days, unlike the NFL sample's two weeks.
 Both still contain independent fair-price fallback and do not establish a

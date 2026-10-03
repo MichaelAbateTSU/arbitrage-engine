@@ -146,13 +146,13 @@ async def reserve_trade(store: Store, opportunity: Opportunity) -> bool:
 
 
 async def paper_tick(store: Store) -> None:
+    trades = [trade for trade in await store.paper_trades() if trade.state in ACTIVE_PAPER]
+    if not trades:
+        return
     markets = {x.id: x for x in await store.markets()}
     books = await store.books()
     settings, _ = await store.risk()
-    trades = await store.paper_trades()
     for trade in trades:
-        if trade.state not in ACTIVE_PAPER:
-            continue
         async with store.sessions() as session:
             op_row = await session.get(OpportunityRow, trade.opportunity_id)
             if op_row is None:
@@ -178,9 +178,14 @@ async def paper_tick(store: Store) -> None:
 async def analysis_tick(store: Store, *, process_paper: bool = True) -> None:
     if process_paper:
         await paper_tick(store)
-    markets = {x.id: x for x in await store.markets()}
     matches = await store.matches()
-    books = await store.books()
+    ids = [
+        identifier
+        for match in matches
+        for identifier in (match.first_market_id, match.second_market_id)
+    ]
+    markets = {x.id: x for x in await store.markets(ids)}
+    books = await store.books(ids)
     trades = await store.paper_trades()
     settings, _ = await store.risk()
     for match in matches:

@@ -281,14 +281,48 @@ def settle_trial(
 
 async def shadow_tick(store: Store) -> None:
     config, _, _ = await validation_settings(store)
-    markets = {market.id: market for market in await store.markets()}
-    books = await store.books()
-    instant = now()
     async with store.sessions.begin() as session:
         rows = (
             await session.scalars(select(ShadowRow).where(ShadowRow.source == store.source))
         ).all()
-        for row in rows:
+        pending = [
+            row
+            for row in rows
+            if row.state
+            in (
+                "SUBMITTED",
+                "UNWIND_PENDING",
+                "HEDGED",
+                "HEDGED_AFTER_UNWIND",
+                "RESIDUAL_EXPOSURE",
+            )
+        ]
+        episodes = (
+            (
+                await session.scalars(
+                    select(EpisodeRow).where(
+                        EpisodeRow.source == store.source, EpisodeRow.active.is_(True)
+                    )
+                )
+            ).all()
+            if config.enabled and config.shadow_enabled
+            else []
+        )
+        signals = [
+            CandidateValidation.model_validate(row.payload["validation"])
+            for row in [*pending, *episodes]
+        ]
+        ids = [
+            identifier
+            for signal in signals
+            for identifier in (signal.first_market_id, signal.second_market_id)
+        ]
+        if not ids:
+            return
+        markets = {market.id: market for market in await store.markets(ids)}
+        books = await store.books(ids)
+        instant = now()
+        for row in pending:
             payload = row.payload
             signal = CandidateValidation.model_validate(payload["validation"])
             a, b = markets.get(signal.first_market_id), markets.get(signal.second_market_id)
@@ -339,13 +373,6 @@ async def shadow_tick(store: Store) -> None:
         if len(today) >= config.max_shadow_daily_trials or loss >= config.max_shadow_daily_loss:
             return
         existing = {row.id for row in rows}
-        episodes = (
-            await session.scalars(
-                select(EpisodeRow).where(
-                    EpisodeRow.source == store.source, EpisodeRow.active.is_(True)
-                )
-            )
-        ).all()
         for episode in episodes:
             signal = CandidateValidation.model_validate(episode.payload["validation"])
             if config.selected_match_ids and signal.match_id not in config.selected_match_ids:

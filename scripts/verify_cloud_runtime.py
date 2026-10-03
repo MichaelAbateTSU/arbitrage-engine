@@ -26,6 +26,8 @@ async def main(review_shortlist=False):
     engine, sessions = create_database(settings)
     store = Store(sessions, settings)
     try:
+        validation = await validation_report(store)
+        risk, revision = await store.risk()
         async with sessions() as session:
             schema = await session.scalar(
                 text("SELECT version_num FROM alembic_version")
@@ -60,8 +62,7 @@ async def main(review_shortlist=False):
                 )
             ).all()
         books = await store.books()
-        risk, revision = await store.risk()
-        validation = await validation_report(store)
+        book_sample_at = now()
         payload = {
             "at": now().isoformat(),
             "source": settings.data_mode,
@@ -100,10 +101,12 @@ async def main(review_shortlist=False):
                 for row in health
             ],
             "books": len(books),
+            "book_sample_at": book_sample_at.isoformat(),
+            "validation_sample_at": validation["at"],
             "fresh_synchronized_books": sum(
                 book.connected
                 and book.synchronized
-                and book.age_ms(now()) <= risk.max_quote_age_ms
+                and book.age_ms(book_sample_at) <= risk.max_quote_age_ms
                 for book in books.values()
             ),
             "validation": {
