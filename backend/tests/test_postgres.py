@@ -75,6 +75,42 @@ async def test_postgres_atomic_reservation_and_later_fill():
     not os.environ.get("ARB_TEST_POSTGRES_URL"),
     reason="Requires explicitly isolated, migrated PostgreSQL database",
 )
+async def test_postgres_lock_timeout_rolls_back_without_holding_the_next_attempt():
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    settings = Settings(
+        _env_file=None,
+        database_url=os.environ["ARB_TEST_POSTGRES_URL"],
+        environment="test",
+        data_mode="demo",
+        kalshi_api_key=None,
+        kalshi_private_key=None,
+        polymarket_us_key_id=None,
+        polymarket_us_secret_key=None,
+    )
+    engine, _ = create_database(settings)
+    lock = text("SELECT pg_advisory_xact_lock(5050992009218)")
+    try:
+        async with engine.begin() as first:
+            assert await first.scalar(text("SHOW statement_timeout")) == "1min"
+            assert await first.scalar(text("SHOW lock_timeout")) == "10s"
+            assert await first.scalar(text("SHOW idle_in_transaction_session_timeout")) == "1min"
+            await first.execute(lock)
+            with pytest.raises(DBAPIError):
+                async with engine.begin() as second:
+                    await second.execute(text("SET LOCAL lock_timeout = '100ms'"))
+                    await second.execute(lock)
+        async with engine.begin() as retry:
+            await retry.execute(lock)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("ARB_TEST_POSTGRES_URL"),
+    reason="Requires explicitly isolated, migrated PostgreSQL database",
+)
 async def test_postgres_focused_records_and_coverage_survive_restart():
     from app.focused import coverage_tick, focused_report, monitor_updates
     from app.validation import validation_settings, validation_tick

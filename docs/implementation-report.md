@@ -537,6 +537,14 @@ was full. The screen now returns immediately when matched families fill the cap
 and stops inventory evaluation as soon as remaining slots are filled. A
 deterministic call-count regression checks both paths. These corrections bound
 the actual work, not just the output, without changing timestamps or thresholds.
+Cloud profiling then distinguished computation (20-family screen ~0.3-0.4s,
+480-direction diagnosis ~0.9-1.2s) from a database stall: an older deployment's
+unfinished candidate-update transaction held the current writer's row locks.
+A targeted, precondition-checked rollback of that abandoned backend released
+only its uncommitted diagnostics. PostgreSQL app connections now have build/source
+identity and bounded command, statement, lock and idle-transaction deadlines;
+worker command timeouts are explicitly reported before retry. A real PostgreSQL
+regression checks lock-timeout rollback and the subsequent successful attempt.
 
 The NBA US sample uses two calendar days, unlike the NFL sample's two weeks.
 Both still contain independent fair-price fallback and do not establish a

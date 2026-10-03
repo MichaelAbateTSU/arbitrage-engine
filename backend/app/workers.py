@@ -58,7 +58,7 @@ async def guarded_loop(
     while True:
         try:
             await action()
-        except (SQLAlchemyError, ValueError, RuntimeError) as exc:
+        except (SQLAlchemyError, ValueError, RuntimeError, TimeoutError) as exc:
             code = (
                 exc.code
                 if isinstance(exc, VenueError)

@@ -34,7 +34,7 @@ from app.matching import extract_rules, match_markets
 from app.settlement import settlement_proof
 from app.shadow import complete_trial, shadow_tick, unwind_trial
 from app.validation import diagnose, validation_settings, validation_tick
-from app.workers import focused_signature
+from app.workers import focused_signature, guarded_loop
 
 
 def evidenced_costs(amount="0"):
@@ -514,3 +514,64 @@ def test_existing_valid_focus_does_not_churn_when_new_families_sort_earlier(scen
     assert focused_signature([match], Venue.KALSHI) == {match.id}
     assert focused_signature([match], b.venue) == {match.id}
     assert focused_signature([match], Venue.INTERNATIONAL) == set()
+
+
+async def test_postgres_connections_have_bounded_commands_and_build_identity(monkeypatch):
+    import app.db as database
+    from app.config import Settings
+
+    captured = {}
+    original = database.create_async_engine
+
+    def capture(url, **kwargs):
+        captured.update(kwargs)
+        return original(url, **kwargs)
+
+    monkeypatch.setattr(database, "create_async_engine", capture)
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        database_url="postgresql://test:test@localhost/test",
+        build_version="test-build-identity",
+        kalshi_api_key=None,
+        kalshi_private_key=None,
+        polymarket_us_key_id=None,
+        polymarket_us_secret_key=None,
+    )
+    engine, _ = database.create_database(settings)
+    try:
+        options = captured["connect_args"]
+        assert options["command_timeout"] == 60
+        assert options["server_settings"] == {
+            "application_name": "arbitrage:demo:test-build-i",
+            "statement_timeout": "60000",
+            "lock_timeout": "10000",
+            "idle_in_transaction_session_timeout": "60000",
+        }
+    finally:
+        await engine.dispose()
+
+
+async def test_worker_command_timeout_is_reported_before_retry(store, monkeypatch):
+    import asyncio
+
+    calls = []
+
+    async def timeout():
+        calls.append("action")
+        raise TimeoutError
+
+    async def stop_after_error(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("app.workers.asyncio.sleep", stop_after_error)
+    with pytest.raises(asyncio.CancelledError):
+        await guarded_loop(store, "validation-timeout-test", timeout, 0.5)
+    from app.db import SystemEventRow
+
+    async with store.sessions() as session:
+        row = await session.scalar(
+            select(SystemEventRow).where(SystemEventRow.role == "validation-timeout-test")
+        )
+        assert row.payload["error_code"] == "TimeoutError"
+    assert calls == ["action"]

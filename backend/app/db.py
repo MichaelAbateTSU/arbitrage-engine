@@ -247,7 +247,22 @@ class AuthAttemptRow(Base):
 def create_database(settings: Settings) -> tuple[AsyncEngine, async_sessionmaker[Any]]:
     kwargs: dict[str, Any] = {"pool_pre_ping": True}
     if not settings.async_database_url.startswith("sqlite"):
-        kwargs.update(pool_size=5, max_overflow=5, pool_recycle=300)
+        kwargs.update(
+            pool_size=5,
+            max_overflow=5,
+            pool_recycle=300,
+            connect_args={
+                "command_timeout": 60,
+                "server_settings": {
+                    "application_name": (
+                        f"arbitrage:{settings.data_mode}:{settings.build_version[:12]}"
+                    ),
+                    "statement_timeout": "60000",
+                    "lock_timeout": "10000",
+                    "idle_in_transaction_session_timeout": "60000",
+                },
+            },
+        )
     engine = create_async_engine(settings.async_database_url, **kwargs)
     if settings.async_database_url.startswith("sqlite"):
 
