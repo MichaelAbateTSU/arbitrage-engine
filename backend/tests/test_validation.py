@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.arbitrage import calculate
 from app.db import EpisodeRow, MatchRow, ShadowRow, ValidationConfigRow, ValidationRow
-from app.domain import AdditionalCosts, D, Exposure, Side, Venue, now
+from app.domain import AdditionalCosts, D, Exposure, Level, PaperFill, Side, Venue, now
 from app.eligibility import (
     PRODUCTS,
     Eligibility,
@@ -88,6 +88,32 @@ def test_costs_reduce_executable_profit_without_changing_depth(scenario):
     assert after.additional_cost_one == after.quantity * D("0.03") + D("0.50")
     assert after.net_profit < before.net_profit
     assert after.cost_one + after.fee_one + after.additional_cost_one <= risk.max_per_venue
+
+
+def test_fractional_public_prices_preserve_exact_derived_money(scenario):
+    a, b, books, _, risk = scenario
+    first, second = books[(a.id, Side.YES)], books[(b.id, Side.NO)]
+    first.asks = [Level(price=D("0.41234567"), quantity=D("100"))]
+    second.asks = [Level(price=D("0.49123456"), quantity=D("100"))]
+    risk.max_contracts = 5
+    result = calculate(first, second, a, b, risk)
+    assert result is not None
+    expected = (result.cost_one + result.cost_two) * risk.slippage_bps / 10000
+    assert result.slippage == expected
+    assert result.slippage.as_tuple().exponent < -8
+    capital = result.cost_one + result.cost_two + result.slippage + result.safety_buffer
+    assert Exposure(committed=capital).committed == capital
+    fill = PaperFill(cost=D("0.1234567890123456"), fee=D("0.0000000000000123"))
+    assert fill.cost == D("0.1234567890123456")
+    assert result.net_profit == (
+        result.quantity
+        - result.cost_one
+        - result.cost_two
+        - result.fee_one
+        - result.fee_two
+        - result.slippage
+        - result.safety_buffer
+    )
 
 
 def test_scenario_matrix_rejects_draw_and_void_holes(scenario):

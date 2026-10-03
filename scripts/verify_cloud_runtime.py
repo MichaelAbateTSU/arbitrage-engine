@@ -77,6 +77,7 @@ async def main(review_shortlist=False):
                     "role": worker.role,
                     "healthy": worker.expires_epoch > time.time(),
                     "at": worker.payload.get("at"),
+                    "build": worker.payload.get("build"),
                 }
                 for worker in workers
             ],
@@ -148,6 +149,10 @@ async def main(review_shortlist=False):
             worker.expires_epoch > time.time() for worker in workers
         ):
             raise RuntimeError("CLOUD_WORKER_HEARTBEAT_MISSING")
+        if any(
+            worker.payload.get("build") != settings.build_version for worker in workers
+        ):
+            raise RuntimeError("CLOUD_WORKER_BUILD_NOT_ACTIVE")
         if not counts["markets"]:
             raise RuntimeError("CLOUD_DISCOVERY_EMPTY")
         if len(market_counts) < 2:

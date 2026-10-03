@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 D = Decimal
 Positive = Annotated[Decimal, Field(gt=0, max_digits=24, decimal_places=8)]
 Nonnegative = Annotated[Decimal, Field(ge=0, max_digits=24, decimal_places=8)]
+Amount = Annotated[Decimal, Field(ge=0)]
 Price = Annotated[Decimal, Field(ge=0, le=1)]
 
 
@@ -315,18 +316,18 @@ class RiskSettings(Model):
 
 class Calculation(Model):
     quantity: Positive
-    cost_one: Nonnegative
-    cost_two: Nonnegative
+    cost_one: Amount
+    cost_two: Amount
     price_one: Price
     price_two: Price
     limit_one: Price
     limit_two: Price
-    fee_one: Nonnegative
-    fee_two: Nonnegative
-    slippage: Nonnegative
-    safety_buffer: Nonnegative
-    additional_cost_one: Nonnegative = D("0")
-    additional_cost_two: Nonnegative = D("0")
+    fee_one: Amount
+    fee_two: Amount
+    slippage: Amount
+    safety_buffer: Amount
+    additional_cost_one: Amount = D("0")
+    additional_cost_two: Amount = D("0")
     payout: Positive
     gross_profit: Decimal
     net_profit: Decimal
@@ -363,11 +364,11 @@ class Opportunity(Model):
 
 
 class Exposure(Model):
-    committed: Nonnegative = D("0")
-    daily_capital: Nonnegative = D("0")
-    daily_loss: Nonnegative = D("0")
-    event_capital: Nonnegative = D("0")
-    league_capital: Nonnegative = D("0")
+    committed: Amount = D("0")
+    daily_capital: Amount = D("0")
+    daily_loss: Amount = D("0")
+    event_capital: Amount = D("0")
+    league_capital: Amount = D("0")
     open_trades: int = 0
     daily_trades: int = 0
     pending_executions: int = 0
@@ -390,8 +391,8 @@ class PaperState(StrEnum):
 
 class PaperFill(Model):
     quantity: Nonnegative = D("0")
-    cost: Nonnegative = D("0")
-    fee: Nonnegative = D("0")
+    cost: Amount = D("0")
+    fee: Amount = D("0")
     price: Price | None = None
     consumed: list[Level] = Field(default_factory=list)
 
@@ -413,7 +414,7 @@ class PaperTrade(Model):
     locked_profit: Decimal | None = None
     settlement_profit: Decimal | None = None
     settlement_at: datetime | None = None
-    reserved_capital: Nonnegative
+    reserved_capital: Amount
     model: Literal["conservative", "optimistic", "observed"]
     model_version: str = "paper-ioc-v1"
     failure_reason: str | None = None

@@ -343,10 +343,18 @@ from capital-weighted USD-seconds, and evidenced from unknown operating costs.
 The configured 7-14-day window is diagnostic only. No profitable edge or
 automatic permission to trade is claimed.
 
-Local verification includes **101 backend tests passed**, one optional PostgreSQL
+Local verification includes **102 backend tests passed**, one optional PostgreSQL
 test skipped in that run, the dedicated PostgreSQL regression passed separately,
 Alembic upgrade/drift/downgrade/re-upgrade checks on isolated PostgreSQL 17,
 **9 frontend component/schema tests** and authenticated eight-page Chromium/WCAG checks,
 types/lints/build and Render Blueprint invariants. Migration revision is
 `6e9f3a2c7d10`. Production rollout and real shortlist observations are recorded
 separately after deployment; the earlier cloud numbers are historical snapshots.
+
+The first new cloud sweep exposed derived slippage with more than eight decimal
+places on fractional public prices. Computed monetary amounts now retain exact
+Decimal precision, without rounding away costs; venue quantities and input
+limits retain their bounded precision. The new fractional-price regression
+covers calculations, paper fills and exposure accounting. Runtime verification
+also requires active worker heartbeat build identities to match the release,
+not merely a Render deployment marked live while old leases drain.
