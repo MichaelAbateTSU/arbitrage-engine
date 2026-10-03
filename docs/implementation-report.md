@@ -564,3 +564,74 @@ Both still contain independent fair-price fallback and do not establish a
 constant complementary payout. No approval, free-cost assertion, account
 permission or profitable real trading edge has been fabricated. A zero-result
 period without fully evidenced eligible coverage is explicitly inconclusive.
+
+### Verified focused release and bounded-review outcome
+
+Executable release **`b6768380e693304c8ceaad51fc0c3f14d924b30e`** was deployed
+API-first to the same four existing Render services. Hosted validation run
+**37144421154** passed backend/PostgreSQL, frontend, authenticated system/browser,
+container and secret-scan checks. Local validation finished with **133 backend
+tests**, plus **four isolated PostgreSQL regressions**; frontend's 12 tests,
+lint/types/format/build and the authenticated eight-page/WCAG workflow passed.
+The pre-existing TanStack React Compiler warning remains nonblocking.
+
+Read-only acceptance job **`job-db0kkdegekts73a4ajn0` succeeded**. At **2026-10-03
+18:34:22 UTC**, all three active heartbeat builds matched the executable release,
+schema was `93ad7c201b46`, all **480 direction diagnostics** for **240 current
+candidate pairs** were fresh, and **14 persisted books** met the unchanged
+freshness/integrity checks at their explicit capture time. HTTPS root/readiness
+returned 200; unauthenticated `/api/v1/validation/focused` returned 401.
+The ordinary paper kill switch was active and live execution remained unavailable.
+There were no opportunities, paper trades, qualified shadow directions or distinct
+funded-spread windows. A fresh book somewhere is not continuous two-venue coverage.
+
+The bounded 20-family screen found **three nonconstant-hedge profiles and 17
+restricted profiles**, not a compatible proven family. The nonrestricted profiles
+were NFL/US, NBA/US and an explicitly inventory-only MLB/US sample with zero event
+pairs. International profiles remain US-close-only. The retained five-event focus
+is therefore **diagnostic-only**, not an executable universe; the previous
+20-match watchlist remains historical evidence.
+
+All ten focused instruments were selected with focused priority and both outcomes
+had subscription confirmation from actual data. GET probes returned nonempty
+snapshots for each ticker/slug. The accepted stream observation was:
+
+| Diagnostic event | Kalshi age | Retail US age | Book explanation |
+| --- | --- | --- | --- |
+| Atlanta / New Orleans | 2.936s | 200.723s | Kalshi usable; US stale |
+| Tennessee / Baltimore | 16.567s | 90.804s | Both stale |
+| LA Lakers / Golden State | 28.777s | 67,287.285s | Both stale |
+| Golden State / LA Clippers | 18.598s | 187.314s | Both stale |
+| Utah / Denver | 26.465s | 7.325s | Both stale |
+
+These were not cap exclusions, rejected subscriptions, failed endpoint mappings
+or empty purchase ladders at that capture. Retail US GET responses also retained
+old original timestamps, approximately 14.930s to 67,257.918s old in the latest
+probes. REST availability cannot certify the freshness of sequenced stream state.
+The diagnostic event labels do not approve event dates or settlement identity;
+unknown start/period/overtime/source evidence remains blocked.
+
+Kalshi and retail US account reads were verified. Kalshi's GET-only key probe
+reported trade scope, primary-account binding and current location-attestation
+expiry, but **not account/KYC/market-specific order permission**. Retail US still
+has no authoritative permission verdict from its balance endpoint. Both venues'
+order permission remains unverified; the international account remains restricted.
+All six additional-cost components remain unknown for every venue: no funding
+path, zero-cost assumption or independent permission was fabricated.
+
+The original collection start remains **2026-10-03 08:03:46.679185 UTC** and
+coverage instrumentation start remains **17:16:55.508191 UTC**. Acceptance recorded
+4,218.480189 sampled pair-seconds and 9.699989 usable-book pair-seconds.
+Independent follow-up job **`job-db0kmbdg1s2s73egmoi0`**, at **18:36:36 UTC**,
+confirmed the same active builds/clocks and advancing persisted counters:
+**4,621.906919 sampled pair-seconds** and **10.927609 usable-book pair-seconds**.
+Every settlement-approved, cost-complete, funded/eligible and profitable stage
+remained zero. Historical versions remain included, and counters are pair-time,
+not wall time or backfilled coverage.
+
+**No fully validated real pair or trading edge was established.** The implemented,
+deployed pipeline now makes that defensible negative/inconclusive decision and
+preserves its evidence. Further time alone cannot close settlement, permission
+and cost gaps. Within this reviewed scope, reconsider the venue/contract family
+or obtain genuinely different compatible governing terms; do not accept independent
+fair-price settlement, freshen stale books or lower thresholds to create trades.
