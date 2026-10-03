@@ -126,6 +126,8 @@ def family_screen(
                 ),
             }
         )
+    if len(result) >= limit:
+        return result
     reviewed = {value["id"] for value in result}
     inventory: dict[tuple[str, Venue, str], Market] = {}
     for market in sorted(markets.values(), key=lambda value: value.id):
@@ -137,11 +139,13 @@ def family_screen(
         if venue != Venue.KALSHI:
             continue
         for (other_league, other_venue, _), b in inventory.items():
+            if len(result) >= limit:
+                return result
             if league != other_league or other_venue == Venue.KALSHI:
                 continue
             proof = settlement_proof(a, b)
             identifier = proof["family_id"]
-            if identifier in reviewed or len(result) >= limit:
+            if identifier in reviewed:
                 continue
             restrictions = venue_restrictions(a, b, eligibility)
             restricted = bool(restrictions)

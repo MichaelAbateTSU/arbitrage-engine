@@ -526,12 +526,17 @@ subscription generation. The fix retains valid current targets and watches
 focused match signatures every two seconds, resubscribing authoritatively after
 selection/specification changes instead of waiting for the five-minute periodic
 snapshot. Neither freshness thresholds nor the original clock were changed.
-The next acceptance check detected delayed broad diagnostics: repeatedly
-enumerating purchase sizes for stale/invalid books blocked timely refresh.
+The next acceptance check detected delayed broad diagnostics. Repeated purchase
+size searches on stale/invalid books were removed as unnecessary work.
 Diagnostics now retain the original BBO, observed depth, age and failure reasons
 but do not present stale/unsynchronized/skewed ladders as current executable net
 profit. Unapproved pairs with genuinely usable books still receive both-direction
-depth pricing. This fixes the work selection, not the timestamps or thresholds.
+depth pricing. A subsequent status snapshot showed diagnostics were still delayed:
+the inventory family loop kept building scenario proofs after its 20-family cap
+was full. The screen now returns immediately when matched families fill the cap
+and stops inventory evaluation as soon as remaining slots are filled. A
+deterministic call-count regression checks both paths. These corrections bound
+the actual work, not just the output, without changing timestamps or thresholds.
 
 The NBA US sample uses two calendar days, unlike the NFL sample's two weeks.
 Both still contain independent fair-price fallback and do not establish a

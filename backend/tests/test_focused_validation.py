@@ -467,6 +467,31 @@ def test_family_review_keeps_international_restricted_and_fair_price_unapproved(
     assert values[0]["disposition"] == "restricted"
 
 
+@pytest.mark.parametrize("has_matches", [True, False])
+def test_family_limit_bounds_proof_work_not_just_returned_rows(scenario, monkeypatch, has_matches):
+    a, b, _, match, _ = scenario
+    markets = {a.id: a}
+    for index in range(40):
+        item = b.model_copy(deep=True)
+        item.id = f"inventory-{index}"
+        item.rules.settlement_source = f"test-source-{index}"
+        markets[item.id] = item
+    if has_matches:
+        markets[b.id] = b
+    limit = 1 if has_matches else 3
+    calls = []
+
+    def counted(first, second):
+        calls.append((first.id, second.id))
+        return settlement_proof(first, second)
+
+    monkeypatch.setattr("app.focused.settlement_proof", counted)
+    result = family_screen([match] if has_matches else [], markets, profiles(), limit=limit)
+    assert len(result) == limit
+    assert len(calls) == limit
+    assert all(row["representative_match_id"] is None for row in result) == (not has_matches)
+
+
 def test_existing_valid_focus_does_not_churn_when_new_families_sort_earlier(scenario):
     a, b, books, match, _ = scenario
     other = match.model_copy(update={"id": "new-match", "event_id": "new-event"})
