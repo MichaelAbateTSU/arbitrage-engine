@@ -166,22 +166,25 @@ def diagnose(
             reasons.append("MISSING_BOOK")
         else:
             available = min(quantity(one.asks), quantity(two.asks))
-            reasons += book_reasons(one, a, instant, risk.max_quote_age_ms)
-            reasons += book_reasons(two, b, instant, risk.max_quote_age_ms)
+            book_failures = book_reasons(one, a, instant, risk.max_quote_age_ms)
+            book_failures += book_reasons(two, b, instant, risk.max_quote_age_ms)
             if abs((one.received_at - two.received_at).total_seconds() * 1000) > (
                 risk.max_book_skew_ms
             ):
-                reasons.append("BOOK_TIME_SKEW")
-            if known_fees:
+                book_failures.append("BOOK_TIME_SKEW")
+            reasons += book_failures
+            if known_fees and not book_failures:
                 try:
                     calc = calculate(one, two, a, b, risk)
                 except ValueError as exc:
                     if str(exc) != "QUANTITY_ROUNDING_MISMATCH":
                         raise
                     reasons.append("QUANTITY_ROUNDING_MISMATCH")
-            if (known_fees and calc is None) or available <= 0:
+            if (known_fees and not book_failures and calc is None) or available <= 0:
                 reasons.append("INSUFFICIENT_DEPTH_OR_CAPITAL")
         execution = list(dict.fromkeys(eligibility[a.venue].reasons + eligibility[b.venue].reasons))
+        if any(not eligibility[venue].open_order_eligible for venue in (a.venue, b.venue)):
+            execution.append("ORDER_PERMISSION_UNVERIFIED")
         minimum = proof["direction_bounds"][str(side)]["minimum_combined_payout"]
         known_floor = proof["direction_bounds"][str(side)]["known_scenario_floor"]
         adjusted = (
@@ -217,8 +220,6 @@ def diagnose(
                 + calc.additional_cost_one
                 + calc.additional_cost_two
             )
-            if any(not eligibility[venue].open_order_eligible for venue in (a.venue, b.venue)):
-                execution.append("ORDER_PERMISSION_UNVERIFIED")
             reasons += exposure_reasons(risk, exposure, capital)
             for market, leg_cost in (
                 (a, calc.cost_one + calc.fee_one + calc.additional_cost_one),
@@ -255,7 +256,11 @@ def diagnose(
                 shadow_reasons=shadow_reasons,
                 shadow_qualified=not shadow_reasons,
                 executable_for_operator=not reasons and not execution,
-                price_basis="Ask-depth profit is conditional on settlement equivalence.",
+                price_basis=(
+                    "Net profit requires usable, synchronized current asks and known fees; "
+                    "last observed BBO/depth is not executable when book checks fail. "
+                    "Valid price math remains conditional on complete settlement/cost evidence."
+                ),
                 first_ask=one.asks[0].price if one and one.asks else None,
                 second_ask=two.asks[0].price if two and two.asks else None,
                 available_quantity=available,

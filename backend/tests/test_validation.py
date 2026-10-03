@@ -48,13 +48,53 @@ def test_unapproved_match_does_not_hide_prices_or_all_other_blockers(scenario):
     books[(a.id, Side.YES)].received_at -= timedelta(seconds=20)
     values = diagnose(match, a, b, books, risk, profiles(), now(), Exposure())
     assert len(values) == 2
-    assert values[0].calculation is not None
+    assert values[0].calculation is None
     assert values[0].first_ask is not None
     assert "MARKET_MATCH_UNAPPROVED" in values[0].reasons
     assert "BOOK_STALE" in values[0].reasons
     assert "ORDER_PERMISSION_UNVERIFIED" in values[0].execution_reasons
     assert not values[0].executable_for_operator
     assert not values[0].shadow_qualified
+
+
+def test_unapproved_but_usable_books_still_receive_depth_pricing(scenario):
+    a, b, books, match, risk = scenario
+    match.status = "review"
+    result = diagnose(match, a, b, books, risk, profiles(), now(), Exposure())[0]
+    assert result.calculation is not None
+    assert "MARKET_MATCH_UNAPPROVED" in result.reasons
+
+
+@pytest.mark.parametrize("failure", ["stale", "unsynchronized", "disconnected", "skew"])
+def test_unusable_books_do_not_run_size_search_or_invent_capital_failure(
+    scenario, monkeypatch, failure
+):
+    a, b, books, match, risk = scenario
+    first = books[(a.id, Side.YES)]
+    if failure == "stale":
+        first.received_at -= timedelta(seconds=20)
+    elif failure == "unsynchronized":
+        first.synchronized = False
+    elif failure == "disconnected":
+        first.connected = False
+    else:
+        first.received_at -= timedelta(milliseconds=risk.max_book_skew_ms + 1)
+    calls = []
+    original = calculate
+
+    def counted(one, two, *args):
+        calls.append(one.outcome)
+        return original(one, two, *args)
+
+    monkeypatch.setattr("app.validation.calculate", counted)
+    values = diagnose(match, a, b, books, risk, profiles(), now(), Exposure())
+    assert Side.YES not in calls
+    assert values[0].calculation is None
+    assert values[0].available_quantity > 0
+    assert "INSUFFICIENT_DEPTH_OR_CAPITAL" not in values[0].reasons
+    assert "ORDER_PERMISSION_UNVERIFIED" in values[0].execution_reasons
+    assert not values[0].shadow_qualified
+    assert not values[0].executable_for_operator
 
 
 def test_each_direction_uses_asks_and_matched_depth(scenario):

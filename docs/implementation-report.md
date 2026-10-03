@@ -526,6 +526,12 @@ subscription generation. The fix retains valid current targets and watches
 focused match signatures every two seconds, resubscribing authoritatively after
 selection/specification changes instead of waiting for the five-minute periodic
 snapshot. Neither freshness thresholds nor the original clock were changed.
+The next acceptance check detected delayed broad diagnostics: repeatedly
+enumerating purchase sizes for stale/invalid books blocked timely refresh.
+Diagnostics now retain the original BBO, observed depth, age and failure reasons
+but do not present stale/unsynchronized/skewed ladders as current executable net
+profit. Unapproved pairs with genuinely usable books still receive both-direction
+depth pricing. This fixes the work selection, not the timestamps or thresholds.
 
 The NBA US sample uses two calendar days, unlike the NFL sample's two weeks.
 Both still contain independent fair-price fallback and do not establish a

@@ -88,7 +88,7 @@ export function Validation({
         </span>
       ),
     },
-    { accessorKey: "available_quantity", header: "Available matched depth" },
+    { accessorKey: "available_quantity", header: "Observed matched depth" },
     {
       id: "size",
       header: "Priced contracts",
