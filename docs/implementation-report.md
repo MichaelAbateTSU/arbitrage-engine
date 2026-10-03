@@ -553,6 +553,11 @@ The cloud verifier also samples book freshness immediately after reading books,
 after its larger diagnostic report, and publishes both capture times. This avoids
 aging its own snapshot through unrelated report queries; original exchange/receipt
 timestamps and the production freshness threshold are unchanged.
+An additional cloud profile identified an orphan from the preceding build still
+active in PostgreSQL's extended-protocol client-read phase; per-statement and
+client deadlines alone did not bound its transaction. The existing PostgreSQL 17
+deployment now also applies a 60-second **whole-transaction** server deadline.
+Its real-database regression verifies backend termination and pool recovery.
 
 The NBA US sample uses two calendar days, unlike the NFL sample's two weeks.
 Both still contain independent fair-price fallback and do not establish a

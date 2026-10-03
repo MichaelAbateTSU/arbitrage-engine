@@ -258,6 +258,7 @@ def create_database(settings: Settings) -> tuple[AsyncEngine, async_sessionmaker
                         f"arbitrage:{settings.data_mode}:{settings.build_version[:12]}"
                     ),
                     "statement_timeout": "60000",
+                    "transaction_timeout": "60000",
                     "lock_timeout": "10000",
                     "idle_in_transaction_session_timeout": "60000",
                 },

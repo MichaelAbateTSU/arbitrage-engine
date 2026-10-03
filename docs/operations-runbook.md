@@ -26,8 +26,11 @@ deployment environment; inspect schema revision and worker errors. Never replace
 the production database with an automatically generated schema.
 Missing worker heartbeat creates a critical in-app alert and an unhealthy status.
 External paging is not configured in this release; operators must monitor health.
-PostgreSQL app connections identify source/build and use a 60-second driver/statement
-deadline, 10-second lock deadline and 60-second idle-transaction deadline. A failed
+PostgreSQL 17 app connections identify source/build and use 60-second driver,
+statement, whole-transaction and idle-transaction deadlines plus a 10-second lock
+deadline. The server-side whole-transaction deadline also closes abandoned
+extended-protocol writes that can remain active while waiting for the client.
+A failed
 iteration rolls back and reports a timeout/error rather than waiting indefinitely.
 When diagnosing an older deployment's orphan connection, inspect `pg_stat_activity`
 and `pg_blocking_pids` without exporting SQL parameters or account data. Terminate

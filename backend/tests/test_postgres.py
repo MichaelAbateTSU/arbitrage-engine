@@ -94,6 +94,7 @@ async def test_postgres_lock_timeout_rolls_back_without_holding_the_next_attempt
     try:
         async with engine.begin() as first:
             assert await first.scalar(text("SHOW statement_timeout")) == "1min"
+            assert await first.scalar(text("SHOW transaction_timeout")) == "1min"
             assert await first.scalar(text("SHOW lock_timeout")) == "10s"
             assert await first.scalar(text("SHOW idle_in_transaction_session_timeout")) == "1min"
             await first.execute(lock)
@@ -103,6 +104,37 @@ async def test_postgres_lock_timeout_rolls_back_without_holding_the_next_attempt
                     await second.execute(lock)
         async with engine.begin() as retry:
             await retry.execute(lock)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("ARB_TEST_POSTGRES_URL"),
+    reason="Requires explicitly isolated, migrated PostgreSQL database",
+)
+async def test_postgres_transaction_deadline_closes_backend_and_pool_recovers():
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    settings = Settings(
+        _env_file=None,
+        database_url=os.environ["ARB_TEST_POSTGRES_URL"],
+        environment="test",
+        kalshi_api_key=None,
+        kalshi_private_key=None,
+        polymarket_us_key_id=None,
+        polymarket_us_secret_key=None,
+    )
+    engine, _ = create_database(settings)
+    try:
+        with pytest.raises(DBAPIError):
+            async with engine.connect() as connection:
+                await connection.execute(text("SET transaction_timeout = '100ms'"))
+                await connection.commit()
+                async with connection.begin():
+                    await connection.execute(text("SELECT pg_sleep(1)"))
+        async with engine.begin() as retry:
+            assert await retry.scalar(text("SELECT 1")) == 1
     finally:
         await engine.dispose()
 

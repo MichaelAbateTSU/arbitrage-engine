@@ -545,6 +545,7 @@ async def test_postgres_connections_have_bounded_commands_and_build_identity(mon
         assert options["server_settings"] == {
             "application_name": "arbitrage:demo:test-build-i",
             "statement_timeout": "60000",
+            "transaction_timeout": "60000",
             "lock_timeout": "10000",
             "idle_in_transaction_session_timeout": "60000",
         }
