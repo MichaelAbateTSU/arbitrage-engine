@@ -358,3 +358,87 @@ limits retain their bounded precision. The new fractional-price regression
 covers calculations, paper fills and exposure accounting. Runtime verification
 also requires active worker heartbeat build identities to match the release,
 not merely a Render deployment marked live while old leases drain.
+
+## 23. Validation-phase production acceptance
+
+Verified on **2026-10-03 at 08:19 UTC**. All four dedicated Render services
+deployed executable release `38f1f4411ff60869b1b152ff9aa92c8ca2ca9617`.
+The three active worker heartbeat build identities matched that release.
+HTTPS dashboard/readiness returned 200; the validation API correctly required
+authentication (401 without a session). Migration `6e9f3a2c7d10` was active.
+The full hosted
+[Validation run 37108810744](https://github.com/MichaelAbateTSU/arbitrage-engine/actions/runs/37108810744)
+passed backend, frontend, system and secret-scan jobs.
+
+Read-only acceptance job `job-db0bl06gekts73909n5g` succeeded. Its snapshot
+contained **1,540 public markets, 240 current candidate pairs, 480 fresh
+directional diagnostics, 12 fresh synchronized outcome books, zero qualified
+directions, zero opportunity episodes and zero shadow trials**. All three
+market-data feeds were connected. These are observations, not promised ongoing
+counts; a book can legitimately become stale between samples. No freshness or
+profit threshold was lowered and no timestamp was reset.
+
+Kalshi and Polymarket US authenticated **GET-only account-read evidence passed**.
+Order permission, KYC, operator jurisdiction and market-specific eligibility
+remain independently unverified. International Polymarket is explicitly
+US-close-only. Account balances and credentials are not included in this report.
+
+| Blocking condition | Distinct pairs in this snapshot |
+|---|---:|
+| Unapproved matching / unproven settlement coverage | 240 |
+| Independent human review missing | 240 |
+| Additional execution/settlement costs unverified | 240 |
+| Missing one or both monitored outcome books | 232 |
+| International product US-close-only restriction | 114 |
+| No gross spread at the priced size | 8 |
+| Stale/skewed/unsynchronized books in directional evidence | 8 |
+| Insufficient observed balance on each priced venue | 8 |
+
+Reasons overlap; they must not be added to obtain a candidate total. The paper
+kill switch remains active and live execution remains unavailable.
+The independent 14-day collection window began **2026-10-03 08:03:46 UTC**.
+It collects diagnostics now; actual virtual shadow trials wait for reviewed,
+cost-evidenced, profitable candidates. A multiweek trading edge has not been
+demonstrated.
+
+### Actual settlement-review findings
+
+Inspected the exact current public rule text, normalized fields and rule hashes
+for **20 selected Kalshi/Polymarket US pairs across 13 distinct NFL events**.
+Eight had nonzero observed matched depth in the review snapshot; that is not
+proof of continuously fresh executable liquidity for all twenty.
+
+| Event | Candidate pairs inspected |
+|---|---:|
+| Denver Broncos / San Francisco 49ers, Oct 4 | 2 |
+| Los Angeles Rams / Philadelphia Eagles, Oct 4 | 1 |
+| Los Angeles Chargers / Seattle Seahawks, Oct 4 | 2 |
+| Detroit Lions / Carolina Panthers, Oct 4 | 2 |
+| Miami Dolphins / Minnesota Vikings, Oct 4 | 1 |
+| Atlanta Falcons / New Orleans Saints, Oct 5 | 2 |
+| Denver Broncos / Los Angeles Chargers, Oct 11 | 1 |
+| Chicago Bears / Green Bay Packers, Oct 11 | 2 |
+| Minnesota Vikings / New Orleans Saints, Oct 11 | 2 |
+| Indianapolis Colts / Pittsburgh Steelers, Oct 11 | 1 |
+| New York Giants / Washington Commanders, Oct 11 | 2 |
+| Cleveland Browns / New York Jets, Oct 11 | 1 |
+| Buffalo Bills / Los Angeles Rams, Oct 12 | 1 |
+
+**None was approved.** Normal winner outcomes and half-refund ties could be
+complementary with the correct YES mapping, but that does not cover every
+settlement scenario. The actual Kalshi text retains the game only if it begins
+within 48 hours, then uses a fair-price fallback. Polymarket US uses a two-week
+rescheduling window and last-fair-market-price fallback. One leg could settle
+while the other remains exposed; independent fair-price payouts need not sum
+to one. This is a substantive incompatibility, not a reason to loosen a price
+threshold.
+
+Polymarket US explicitly includes overtime and names NFL as its outcome source.
+Kalshi's inspected descriptions use the generic governing-league source and
+do not explicitly state overtime; reliable Kalshi kickoff remains unverified.
+Both raw descriptions leave cancellation/void details requiring further
+independent evidence. Some available raw clauses remain unnormalized by the
+deliberately conservative parser. Source review must distinguish that from
+truly absent evidence rather than auto-filling unknowns. The exported inspection
+retained the exact rule hashes; no operator attestation, source annotation,
+human-review flag or approval was fabricated.
