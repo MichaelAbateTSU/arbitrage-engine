@@ -122,10 +122,13 @@ or market-specific eligibility. International Polymarket is US close-only.
 ## Opportunity-validation pilot
 
 Keep the global paper kill switch active and open **Opportunity validation**.
-Review the selected 10-20 pairs, exact contract evidence and scenario payouts.
+Screen rule families first, then review the focused 5-10 pairs, exact contract
+evidence and scenario payout bounds. The old shortlist is retained, not erased.
+If no promising family is found, the sample is explicitly diagnostic-only.
 Public-source shadow candidates require independent, hash-bound human review;
 clicking approval cannot override missing or incompatible rules. Record verified
-settlement/rebalancing costs separately from venue fees, and document eligibility
+funding, conversion, withdrawal, settlement, rebalancing and network costs
+separately from venue trading fees, and document eligibility
 without pasting credentials. Do not lower profitability or freshness thresholds.
 
 The independent shadow engine uses virtual balances, $25-per-leg default caps,
@@ -135,7 +138,13 @@ Held hedge/residual capital remains reserved until final settlement. The
 dashboard separates unsettled, observed-settlement and failed-hedge results;
 operating costs remain unverified until evidenced. Seven to fourteen days is an
 initial diagnostic window, not automatic permission to trade; zero qualified
-episodes is a valid finding.
+episodes is informative only over well-observed, eligible, approved pairs.
+The dashboard preserves the original clock and separately records usable
+pair-seconds, funded-size spread windows and unobserved historical coverage.
+Unknown or blocked coverage is inconclusive, not evidence of no arbitrage.
+Kalshi's signed GET API-key scope check is separate from balance reads and
+account/KYC permission; Polymarket US retail permission still needs independent
+evidence. No order or preview is submitted.
 
 ## Validation
 

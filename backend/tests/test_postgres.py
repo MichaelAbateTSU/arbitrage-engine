@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.config import Settings
 from app.db import OpportunityRow, RiskRow, create_database
 from app.demo import demo_books, demo_markets
-from app.domain import D, Opportunity, PaperState, RiskSettings
+from app.domain import D, Opportunity, PaperState, RiskSettings, now
 from app.service import analysis_tick, rematch_all, reserve_trade
 from app.store import Store
 
@@ -19,7 +19,16 @@ from app.store import Store
     reason="Requires explicitly isolated, migrated PostgreSQL database",
 )
 async def test_postgres_atomic_reservation_and_later_fill():
-    settings = Settings(database_url=os.environ["ARB_TEST_POSTGRES_URL"], environment="test")
+    settings = Settings(
+        _env_file=None,
+        database_url=os.environ["ARB_TEST_POSTGRES_URL"],
+        environment="test",
+        data_mode="demo",
+        kalshi_api_key=None,
+        kalshi_private_key=None,
+        polymarket_us_key_id=None,
+        polymarket_us_secret_key=None,
+    )
     engine, sessions = create_database(settings)
     store = Store(sessions, settings)
     try:
@@ -58,5 +67,63 @@ async def test_postgres_atomic_reservation_and_later_fill():
         report = await summary(restarted)
         assert report["fully_hedged"] == 4
         assert D(report["simulated_locked_profit"]) > 0
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("ARB_TEST_POSTGRES_URL"),
+    reason="Requires explicitly isolated, migrated PostgreSQL database",
+)
+async def test_postgres_focused_records_and_coverage_survive_restart():
+    from app.focused import coverage_tick, focused_report, monitor_updates
+    from app.validation import validation_settings, validation_tick
+
+    settings = Settings(
+        _env_file=None,
+        database_url=os.environ["ARB_TEST_POSTGRES_URL"],
+        environment="test",
+        data_mode="demo",
+        kalshi_api_key=None,
+        kalshi_private_key=None,
+        polymarket_us_key_id=None,
+        polymarket_us_secret_key=None,
+    )
+    engine, sessions = create_database(settings)
+    store = Store(sessions, settings)
+    try:
+        await store.initialize()
+        for market in demo_markets():
+            await store.save_market(market)
+        await rematch_all(store)
+        await store.save_books(demo_books(demo_markets(), 0))
+        _, _, started = await validation_settings(store)
+        await validation_tick(store)
+        focused = await focused_report(store)
+        assert focused["families"]
+        assert len(focused["focused_pairs"]) <= 5
+        identifier = focused["focused_pairs"][0]["books"][0]["market_id"]
+        await monitor_updates(
+            store,
+            {
+                identifier: {"selection": "selected", "selection_at": now().isoformat()},
+            },
+        )
+        await monitor_updates(store, {identifier: {"subscription": "confirmed_by_data"}})
+        await coverage_tick(store)
+        await asyncio.sleep(0.5)
+        restarted = Store(sessions, settings)
+        await coverage_tick(restarted)
+        report = await focused_report(restarted)
+        assert D(report["coverage"]["pair_seconds"]["sampled"]) > 0
+        assert (await validation_settings(restarted))[2] == started
+        book = next(
+            book
+            for pair in report["focused_pairs"]
+            for book in pair["books"]
+            if book["market_id"] == identifier
+        )
+        assert book["monitoring"]["selection"] == "selected"
+        assert book["monitoring"]["subscription"] == "confirmed_by_data"
     finally:
         await engine.dispose()

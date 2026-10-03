@@ -56,7 +56,7 @@ headers. See SECURITY.md and incident response.
 
 ## Opportunity validation
 
-Migrate to `6e9f3a2c7d10` before deploying validation workers. Keep live execution
+Migrate to `93ad7c201b46` before deploying focused-validation workers. Keep live execution
 disabled and the ordinary paper kill switch active. The independent shadow
 engine is separately enabled/paused through its audited configuration and uses
 only virtual balances; the paper kill switch does not stop diagnostic collection
@@ -69,15 +69,55 @@ Review the persisted watchlist's outcomes, deadlines, resolution sources,
 overtime, draw, cancellation and postponement evidence. Approve only when the
 scenario matrix is complete and the independent review is documented.
 
-Enter actual per-venue settlement/rebalancing/fixed-cost assumptions with
-provenance and daily operating costs separately. Unknown costs stay blocked.
+Review at most 20 policy families before allocating book monitoring. The automatic
+focus selects up to five distinct events initially (configurable to 5-10).
+Known incompatible/independent fair-price families are not called promising.
+If no potentially eligible family has candidate pairs, the non-close-only sample
+is explicitly diagnostic-only. Inventory-only family samples are not event pairs.
+Historical watchlist IDs are retained; current selections refresh after rule/hash
+changes without changing `collection_started_at`.
+
+For each selected instrument inspect cap selection, actual subscription request,
+confirmation/rejection, mapping evidence, generation, reconstruction and timestamp.
+Public REST probes distinguish endpoint availability from missing/stale stream
+snapshots, but never overwrite sequenced streams or freshen exchange timestamps.
+Subscription status is not inferred from venue-level connected health.
+
+Enter funding/conversion/withdrawal/settlement/rebalancing/network components as
+`verified_amount`, `verified_zero`, `not_applicable` or `unknown`, with amount,
+allocation basis, execution path, evidence reference and explicit expiry.
+Amounts allocate per filled contract or applicable executed leg; components
+specify opening, emergency unwind, or both. Settlement expenses are planned
+opening/holding allocations, not charged again on a sale. Fee models
+remain separate. Do not use a generic USD quote or fee page to certify an unknown
+funding method. Legacy aggregate amounts remain in historical data and numerical
+pricing but cannot substitute for six-component proof. Nonzero legacy and new
+component amounts cannot coexist. Enter daily operating costs separately.
+Unknown/expired cost evidence blocks qualification and delayed public shadow fills.
 Account attestations expire; international US close-only restrictions cannot be
 overridden. Never paste secrets in any evidence field.
 
-Inspect `/api/v1/validation/summary`, `/candidates`, `/episodes` and
+Kalshi also checks GET `/trade-api/v2/api_keys`: only the current key's sanitized
+trade-scope/binding/region-expiry verdict is retained. No key ID, key name or raw
+key response is stored. Restricted subaccount/institutional bindings cannot
+certify this pipeline's primary buying power. Write scope is not KYC/venue-account
+permission. The US retail balance endpoint has no documented account-permission
+field; institutional identity endpoints are not substituted and no preview/order
+is sent to test access.
+
+Inspect `/api/v1/validation/summary`, `/focused`, `/candidates`, `/episodes` and
 `/shadow-trials` under the normal authenticated reader policy.
 Configuration updates require admin/CSRF, current revision and an audit reason.
 After 7-14 days, compare distinct episodes, available coverage, baseline versus
 injected stress, unsettled versus observed-settlement P&L, failure losses and
-capital lockup after operating costs. Missing evidence or zero profitable
+capital lockup after operating costs. Daily coverage counters report aggregate
+pair-seconds, not elapsed calendar days: approved, usable books, approved+priced,
+cost-verified and funded/eligible stages. Sampling is independent of broad
+diagnostic sweeps. Intervals require adjacent <=2-second samples, unchanged
+evidence/generation/integrity epoch and original quote/fee/cost/account expiry.
+Outages, superseded proofs, failed read probes and stale/absent books receive no
+qualified credit. Earlier coverage remains unknown, never reconstructed from
+wall time. Funded-size positive windows are distinct per direction with the
+configured episode-gap deduplication; they are hypothetical decisions, not fills.
+Observe positive and nonqualifying spread time separately. Missing evidence or zero profitable
 episodes does not justify relaxing limits. No timer or result enables live mode.

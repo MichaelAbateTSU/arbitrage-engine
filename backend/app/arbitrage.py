@@ -16,6 +16,7 @@ from app.domain import (
 )
 from app.matching import match_markets
 from app.pricing import book_reasons, consume, cost, fee, quantity
+from app.settlement import settlement_proof
 
 
 def calculate(
@@ -150,6 +151,8 @@ def detect(
         failures.append("MARKET_MATCH_UNAPPROVED")
     if settings.require_human_review and not match.human_reviewed:
         failures.append("HUMAN_REVIEW_REQUIRED")
+    if not settlement_proof(a, b)["proven"]:
+        failures.append("SETTLEMENT_SCENARIO_COVERAGE_UNPROVEN")
     if match.confidence < settings.min_confidence:
         failures.append("MATCH_CONFIDENCE_TOO_LOW")
     if a.status != "open" or b.status != "open" or not a.tradable or not b.tradable:
@@ -163,10 +166,12 @@ def detect(
     if not a.fee.known_at(instant) or not b.fee.known_at(instant):
         failures.append("UNKNOWN_FEE")
     if a.source == "public" and any(
-        not settings.additional_costs.get(venue, AdditionalCosts()).verified
+        not settings.additional_costs.get(venue, AdditionalCosts()).known_at(instant)
         for venue in (a.venue, b.venue)
     ):
         failures.append("ADDITIONAL_COSTS_UNVERIFIED")
+    if any(m.instrument_mapping_error() for m in (a, b)):
+        failures.append("INSTRUMENT_MAPPING_INVALID")
     if exposure and exposure.cooldown_until and instant < exposure.cooldown_until:
         failures.append("EXECUTION_COOLDOWN")
     opportunities: list[Opportunity] = []

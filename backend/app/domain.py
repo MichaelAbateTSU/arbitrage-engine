@@ -47,8 +47,8 @@ class Model(BaseModel):
     def no_nonfinite_or_float_money(cls, value: Any, info: Any) -> Any:
         field = cls.model_fields.get(info.field_name)
         if field and field.annotation is Decimal:
-            if isinstance(value, float):
-                raise ValueError("Financial values must be decimal strings, not floats")
+            if isinstance(value, (float, bool)):
+                raise ValueError("Financial values must not be floats or booleans")
             if not D(value).is_finite():
                 raise ValueError("Financial values must be finite")
         return value
@@ -70,8 +70,18 @@ class Rules(Model):
     cancellation: Literal["half_refund", "fair_price", "void"] | None = None
     postponement: str | None = None
     settlement_source: str | None = None
+    discretionary_settlement: Literal["excluded", "independent_fair_price"] | None = None
     payout: Price = D("1")
     evidence: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def exception_evidence(self) -> "Rules":
+        if (
+            self.discretionary_settlement is not None
+            and not self.evidence.get("discretionary_settlement", "").strip()
+        ):
+            raise ValueError("Discretionary settlement policy requires governing-terms evidence")
+        return self
 
     @property
     def unknowns(self) -> list[str]:
@@ -137,6 +147,7 @@ class Market(Model):
             {
                 "venue": self.venue,
                 "external_id": self.external_id,
+                "raw_external_id": self.raw.get("ticker" if self.venue == Venue.KALSHI else "slug"),
                 "event_id": self.event_id,
                 "title": self.title,
                 "rules": self.rules_text,
@@ -171,6 +182,19 @@ class Market(Model):
     def valid_price(self, price: Decimal, side: Side = Side.YES) -> bool:
         quote = price if side == Side.YES else D("1") - price
         return bool(self.price_ranges) and any(r.accepts(quote) for r in self.price_ranges)
+
+    def instrument_mapping_error(self) -> str | None:
+        if self.source != "public":
+            return None
+        key = "ticker" if self.venue == Venue.KALSHI else "slug"
+        declared = self.raw.get(key)
+        if declared is not None and declared != self.external_id:
+            return "METADATA_INSTRUMENT_MISMATCH"
+        if self.venue == Venue.INTERNATIONAL and (
+            set(self.token_ids) != set(Side) or any(not value for value in self.token_ids.values())
+        ):
+            return "OUTCOME_TOKEN_MAPPING_MISSING"
+        return None
 
 
 class Level(Model):
@@ -239,23 +263,92 @@ class Match(Model):
     version: str = "deterministic-v1"
 
 
+COST_COMPONENTS = ("funding", "conversion", "withdrawal", "settlement", "rebalancing", "network")
+
+
+class CostComponent(Model):
+    status: Literal["verified_amount", "verified_zero", "not_applicable", "unknown"] = "unknown"
+    amount: Nonnegative = D("0")
+    basis: Literal["per_contract", "per_leg"] = "per_leg"
+    applies_to: Literal["opening", "unwind", "both"] = "opening"
+    execution_path: str = Field(default="", max_length=1000)
+    evidence: str = Field(default="", max_length=4000)
+    observed_at: datetime = Field(default_factory=now)
+    expires_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def consistent(self) -> "CostComponent":
+        if self.observed_at.tzinfo is None or (
+            self.expires_at is not None and self.expires_at.tzinfo is None
+        ):
+            raise ValueError("Cost evidence timestamps must be timezone aware")
+        if self.status == "verified_amount" and self.amount <= 0:
+            raise ValueError("Verified amounts must be positive; use verified_zero for zero")
+        if self.status != "verified_amount" and self.amount != 0:
+            raise ValueError("Only verified_amount may specify a nonzero charge")
+        if self.status != "unknown":
+            if not self.evidence.strip() or not self.execution_path.strip():
+                raise ValueError("Cost evidence must identify its source and execution path")
+            if self.expires_at is None or not self.observed_at < self.expires_at:
+                raise ValueError("Verified cost evidence requires an explicit expiry")
+        return self
+
+    def known_at(self, instant: datetime) -> bool:
+        return (
+            self.status != "unknown"
+            and self.expires_at is not None
+            and self.observed_at <= instant < self.expires_at
+        )
+
+
 class AdditionalCosts(Model):
     verified: bool = False
     settlement_per_contract: Nonnegative = D("0")
     rebalancing_per_contract: Nonnegative = D("0")
     fixed_per_leg: Nonnegative = D("0")
     evidence: str = Field(default="", max_length=4000)
+    components: dict[str, CostComponent] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def evidence_required(self) -> "AdditionalCosts":
         if self.verified and not self.evidence.strip():
             raise ValueError("Additional-cost verification requires evidence")
+        if set(self.components) - set(COST_COMPONENTS):
+            raise ValueError("Unrecognized cost component")
+        if self.components and any(
+            (self.settlement_per_contract, self.rebalancing_per_contract, self.fixed_per_leg)
+        ):
+            raise ValueError("Replace legacy aggregate amounts before entering component costs")
         return self
 
-    def total(self, quantity: Decimal) -> Decimal:
+    def unknown_components(self, instant: datetime) -> list[str]:
+        return [
+            name
+            for name in COST_COMPONENTS
+            if name not in self.components or not self.components[name].known_at(instant)
+        ]
+
+    def known_at(self, instant: datetime) -> bool:
+        return not self.unknown_components(instant)
+
+    def total(
+        self, quantity: Decimal, operation: Literal["opening", "unwind"] = "opening"
+    ) -> Decimal:
         return (
-            quantity * (self.settlement_per_contract + self.rebalancing_per_contract)
+            quantity
+            * (
+                (self.settlement_per_contract if operation == "opening" else D("0"))
+                + self.rebalancing_per_contract
+            )
             + self.fixed_per_leg
+            + sum(
+                (
+                    value.amount * (quantity if value.basis == "per_contract" else 1)
+                    for value in self.components.values()
+                    if value.applies_to in (operation, "both")
+                ),
+                D("0"),
+            )
         )
 
 

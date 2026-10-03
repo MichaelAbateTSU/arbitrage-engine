@@ -48,6 +48,22 @@ test("demo dashboard, guarded paper lifecycle and validation phase", async ({
       name: "7–14-day shadow diagnostic window",
     }),
   ).toBeVisible();
+  for (const name of [
+    "Contract families before more games",
+    "Focused book diagnosis",
+    "Usable observation coverage, not just elapsed days",
+    "Component-level cost evidence",
+  ]) {
+    await expect(
+      page.getByRole("heading", { name, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(page.getByText(/No clock was restarted/)).toBeVisible();
+  await page
+    .getByText("kalshi: review all six components", { exact: true })
+    .click();
+  await expect(page.getByLabel("kalshi funding status")).toHaveValue("unknown");
+  await expect(page.getByLabel("kalshi funding amount")).toBeDisabled();
   expect(
     (
       await new AxeBuilder({ page })

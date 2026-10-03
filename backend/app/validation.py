@@ -33,17 +33,25 @@ from app.domain import (
     now,
 )
 from app.eligibility import Eligibility, eligibility_status
+from app.focused import choose_focus, family_screen, focused_report, persist_families
 from app.matching import match_markets
 from app.pricing import book_reasons, quantity
+from app.settlement import SCREEN_VERSION, settlement_proof
 from app.store import Store, audit, exposure_for
 
 
 class ValidationSettings(Model):
     enabled: bool = True
     shadow_enabled: bool = True
-    shortlist_size: int = Field(default=20, ge=10, le=20)
+    shortlist_size: int = Field(default=5, ge=5, le=20)
     diagnostic_days: int = Field(default=14, ge=7, le=14)
     selected_match_ids: list[str] = Field(default_factory=list, max_length=20)
+    legacy_selected_match_ids: list[str] = Field(default_factory=list, max_length=20)
+    focus_version: str = ""
+    focus_automatic: bool = True
+    focus_scope: Literal["diagnostic_only", "potentially_eligible_review", "operator_selected"] = (
+        "diagnostic_only"
+    )
     virtual_balance_per_venue: Positive = D("500")
     max_shadow_per_leg: Positive = D("25")
     max_shadow_daily_trials: int = Field(default=10, ge=1, le=100)
@@ -95,82 +103,8 @@ class CandidateValidation(Model):
     fee_evidence: dict[str, Any]
     inputs: dict[str, Any]
     source: Literal["demo", "public"]
-
-
-def settlement_proof(a: Market, b: Market) -> dict[str, Any]:
-    verified = match_markets(a, b, human_reviewed=True)
-    scenarios = []
-    for side in Side:
-        other = side if verified.inverted else side.opposite
-        for winner in a.participants:
-            one = D(a.yes_team == winner)
-            two = D(b.yes_team == winner)
-            payout = (one if side == Side.YES else 1 - one) + (
-                two if other == Side.YES else 1 - two
-            )
-            scenarios.append(
-                {
-                    "direction": side,
-                    "scenario": f"winner:{winner}",
-                    "combined_payout": str(payout),
-                    "covered": payout == 1,
-                }
-            )
-        draw = a.rules.draw
-        if draw == b.rules.draw and draw == "half_refund":
-            scenarios.append(
-                {
-                    "direction": side,
-                    "scenario": "draw",
-                    "combined_payout": "1",
-                    "covered": True,
-                }
-            )
-        elif draw == b.rules.draw and draw == "no":
-            payout = D(side == Side.NO) + D(other == Side.NO)
-            scenarios.append(
-                {
-                    "direction": side,
-                    "scenario": "draw",
-                    "combined_payout": str(payout),
-                    "covered": payout == 1,
-                }
-            )
-        scenarios.append(
-            {
-                "direction": side,
-                "scenario": "cancelled_or_void",
-                "combined_payout": "1"
-                if (a.rules.cancellation == b.rules.cancellation == "half_refund")
-                else None,
-                "covered": a.rules.cancellation == b.rules.cancellation == "half_refund",
-            }
-        )
-    return {
-        "proven": verified.status == "approved" and all(row["covered"] for row in scenarios),
-        "reasons": verified.reasons,
-        "scenarios": scenarios,
-        "rules_hashes": [a.rules_hash, b.rules_hash],
-        "comparison": {
-            field: [getattr(a.rules, field), getattr(b.rules, field)]
-            for field in (
-                "period",
-                "overtime",
-                "draw",
-                "cancellation",
-                "postponement",
-                "settlement_source",
-                "payout",
-            )
-        },
-        "deadlines": {
-            "event_start": [str(a.start_time), str(b.start_time)],
-            "venue_close": [a.raw.get("close_time"), b.raw.get("endDate")],
-            "postponement": [a.rules.postponement, b.rules.postponement],
-        },
-        "evidence": [a.rules.evidence, b.rules.evidence],
-        "limitation": "Coverage requires verified normalized rules and independent source review.",
-    }
+    settlement_adjusted_net_profit: D | None = None
+    known_scenario_net_floor: D | None = None
 
 
 def diagnose(
@@ -200,6 +134,8 @@ def diagnose(
         common.append("CURRENCY_ASSUMPTION_UNACKNOWLEDGED")
     if not (a.tradable and b.tradable and a.status == b.status == "open"):
         common.append("MARKET_NOT_TRADABLE")
+    if any(m.instrument_mapping_error() for m in (a, b)):
+        common.append("INSTRUMENT_MAPPING_INVALID")
     if a.league not in risk.supported_leagues:
         common.append("SPORT_DISABLED")
     if any(m.id in risk.blocked_markets for m in (a, b)):
@@ -209,10 +145,16 @@ def diagnose(
     known_fees = all(m.fee.known_at(instant) for m in (a, b))
     if not known_fees:
         common.append("UNKNOWN_OR_EXPIRED_FEE")
-    if a.source == "public" and any(
-        not risk.additional_costs.get(m.venue, AdditionalCosts()).verified for m in (a, b)
-    ):
-        common.append("ADDITIONAL_COSTS_UNVERIFIED")
+    if a.source == "public":
+        for m in (a, b):
+            unknown = risk.additional_costs.get(m.venue, AdditionalCosts()).unknown_components(
+                instant
+            )
+            if unknown:
+                common += [
+                    "ADDITIONAL_COSTS_UNVERIFIED",
+                    *[f"COST_UNKNOWN_{m.venue.upper()}_{name.upper()}" for name in unknown],
+                ]
     results = []
     for side in Side:
         other = side if match.inverted else side.opposite
@@ -240,6 +182,20 @@ def diagnose(
             if (known_fees and calc is None) or available <= 0:
                 reasons.append("INSUFFICIENT_DEPTH_OR_CAPITAL")
         execution = list(dict.fromkeys(eligibility[a.venue].reasons + eligibility[b.venue].reasons))
+        minimum = proof["direction_bounds"][str(side)]["minimum_combined_payout"]
+        known_floor = proof["direction_bounds"][str(side)]["known_scenario_floor"]
+        adjusted = (
+            calc.net_profit + calc.quantity * (D(minimum) - 1)
+            if calc and minimum is not None
+            else None
+        )
+        known_net = (
+            calc.net_profit + calc.quantity * (D(known_floor) - 1)
+            if calc and known_floor is not None
+            else None
+        )
+        if adjusted is not None and adjusted <= 0:
+            reasons.append("NONPOSITIVE_WORST_CASE_SETTLEMENT_PROFIT")
         if risk.kill_switch:
             execution.append("KILL_SWITCH_ACTIVE")
         if calc:
@@ -325,6 +281,8 @@ def diagnose(
                     "risk": risk.model_dump(mode="json"),
                 },
                 source=a.source,
+                settlement_adjusted_net_profit=adjusted,
+                known_scenario_net_floor=known_net,
             )
         )
     return results
@@ -350,7 +308,7 @@ async def validation_settings(store: Store) -> tuple[ValidationSettings, int, da
 
 
 async def validation_tick(store: Store) -> None:
-    settings, _, _ = await validation_settings(store)
+    settings, config_revision, _ = await validation_settings(store)
     if not settings.enabled:
         return
     markets = {m.id: m for m in await store.markets()}
@@ -358,6 +316,8 @@ async def validation_tick(store: Store) -> None:
     books = await store.books()
     risk, _ = await store.risk()
     eligibility = await eligibility_status(store)
+    families = await asyncio.to_thread(family_screen, matches, markets, eligibility)
+    await persist_families(store, families)
     trades = await store.paper_trades()
     instant = now()
     current_ids = set()
@@ -454,34 +414,52 @@ async def validation_tick(store: Store) -> None:
             if key[0] not in {match.id for match in matches}:
                 episode.active = False
                 episode.payload = {**episode.payload, "closed_at": instant.isoformat()}
-        if not settings.selected_match_ids:
-            ordered = sorted(
+        if settings.focus_automatic:
+            size = 5 if not settings.focus_version else min(10, settings.shortlist_size)
+            selected, scope = choose_focus(
+                families,
                 matches,
-                key=lambda match: (
-                    markets.get(match.second_market_id) is None
-                    or markets[match.second_market_id].venue == Venue.INTERNATIONAL,
-                    -sum(
-                        (
-                            quantity(book.asks)
-                            for (identifier, _), book in books.items()
-                            if identifier in (match.first_market_id, match.second_market_id)
-                        ),
-                        D("0"),
-                    ),
-                    match.id,
-                ),
-            )[: settings.shortlist_size]
+                markets,
+                books,
+                settings.selected_match_ids,
+                size,
+            )
             config_row = await session.get(ValidationConfigRow, store.source, with_for_update=True)
-            if config_row and not config_row.payload["selected_match_ids"] and ordered:
-                selected = [match.id for match in ordered]
-                config_row.payload = {**config_row.payload, "selected_match_ids": selected}
+            if (
+                config_row
+                and config_row.revision == config_revision
+                and (
+                    selected != settings.selected_match_ids
+                    or settings.focus_version != SCREEN_VERSION
+                    or settings.focus_scope != scope
+                )
+            ):
+                previous = config_row.payload
+                config_row.payload = {
+                    **settings.model_dump(mode="json"),
+                    "selected_match_ids": selected,
+                    "shortlist_size": size,
+                    "focus_version": SCREEN_VERSION,
+                    "focus_scope": scope,
+                    "legacy_selected_match_ids": (
+                        settings.selected_match_ids
+                        if not settings.focus_version
+                        else settings.legacy_selected_match_ids
+                    ),
+                }
                 config_row.revision += 1
                 audit(
                     session,
                     store.source,
                     "validation_review_shortlist",
                     "analysis",
-                    {"matches": selected, "approval": "none", "basis": "same_currency_then_depth"},
+                    {
+                        "matches": selected,
+                        "approval": "none",
+                        "basis": "family_first",
+                        "scope": scope,
+                        "previous_matches": previous["selected_match_ids"],
+                    },
                 )
 
 
@@ -583,4 +561,5 @@ async def validation_report(store: Store) -> dict[str, Any]:
             "Shadow results are hypothetical. Unknown account permissions, missing rules, "
             "fees or costs stay blocked. Seven to fourteen days is diagnostic, not live approval."
         ),
+        "focused_validation": await focused_report(store),
     }

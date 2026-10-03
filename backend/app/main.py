@@ -120,7 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 result["database"] = "healthy"
                 revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
                 result["schema"] = str(revision or "unavailable")
-                result["ready"] = revision == "6e9f3a2c7d10"
+                result["ready"] = revision == "93ad7c201b46"
         except SQLAlchemyError:
             log.error("dependency_failed", error_code="DATABASE_OR_MIGRATION_UNAVAILABLE")
         if redis:

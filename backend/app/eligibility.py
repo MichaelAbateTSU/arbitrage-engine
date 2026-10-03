@@ -86,6 +86,16 @@ class Eligibility(Model):
     attestation: dict[str, Any] | None = None
     probe_error: str | None = None
     live_execution_available: Literal[False] = False
+    key_trading_scope: Literal["verified", "restricted", "unverified", "unsupported"] = "unverified"
+    key_scope_probe_error: str | None = None
+    key_scope_observed_at: datetime | None = None
+    key_region_status: Literal["unknown", "current", "expired"] = "unknown"
+    key_binding_status: Literal[
+        "primary_account", "bound_subaccount", "institutional_subtrader", "unverified"
+    ] = "unverified"
+    permission_evidence_limitation: str = (
+        "Balance access proves neither trading scope nor account/KYC/market permission."
+    )
 
 
 async def eligibility_status(store: Store) -> dict[Venue, Eligibility]:
@@ -123,7 +133,11 @@ async def eligibility_status(store: Store) -> dict[Venue, Eligibility]:
             else ("disconnected" if feed == "disconnected" else "unknown")
         )
         at = datetime.fromisoformat(probe["at"]) if probe.get("at") else None
-        fresh = at is not None and 0 <= (now() - at).total_seconds() < 900
+        fresh = (
+            at is not None
+            and 0 <= (now() - at).total_seconds() < 900
+            and probe.get("build") == store.settings.build_version
+        )
         item.account_read_access = (
             "verified"
             if fresh and probe.get("verified")
@@ -133,6 +147,39 @@ async def eligibility_status(store: Store) -> dict[Venue, Eligibility]:
         if fresh and probe.get("available_balance") is not None:
             item.available_balance = D(probe["available_balance"])
             item.balance_observed_at = at
+        scope = payload.get("key_scope", {})
+        scope_at = datetime.fromisoformat(scope["at"]) if scope.get("at") else None
+        scope_fresh = (
+            scope_at is not None
+            and 0 <= (now() - scope_at).total_seconds() < 900
+            and scope.get("build") == store.settings.build_version
+        )
+        item.key_scope_probe_error = scope.get("error")
+        item.key_scope_observed_at = scope_at
+        if venue == Venue.US:
+            item.key_trading_scope = "unsupported"
+            item.permission_evidence_limitation = (
+                "Retail balances GET has no account-trading-permission field. Institutional "
+                "account/identity APIs are a different product; no order or preview is sent."
+            )
+        elif venue == Venue.KALSHI:
+            if scope_fresh:
+                item.key_trading_scope = scope.get("trading_scope", "unverified")
+                item.key_binding_status = scope.get("binding_status", "unverified")
+                expiry = scope.get("region_expiration_ts")
+                if expiry is not None:
+                    item.key_region_status = "current" if expiry > now().timestamp() else "expired"
+            if item.key_trading_scope == "restricted":
+                item.order_permission = "restricted"
+                item.reasons.append("API_KEY_HAS_NO_TRADING_SCOPE")
+            elif item.key_trading_scope != "verified":
+                item.reasons.append("API_KEY_TRADING_SCOPE_UNVERIFIED")
+            if item.key_region_status == "expired":
+                item.reasons.append("API_KEY_LOCATION_ATTESTATION_EXPIRED")
+            if item.key_binding_status != "primary_account":
+                item.reasons.append("PRIMARY_ACCOUNT_KEY_BINDING_UNVERIFIED")
+                item.available_balance = None
+                item.balance_observed_at = None
         if venue == Venue.INTERNATIONAL and store.settings.operator_country.upper() == "US":
             item.jurisdiction_status = "close_only"
             item.order_permission = "restricted"
@@ -192,7 +239,11 @@ def available_balance(venue: Venue, data: dict[str, Any]) -> D:
 async def refresh_account_evidence(store: Store, client: httpx.AsyncClient) -> None:
     settings = store.settings
     for venue in (Venue.KALSHI, Venue.US):
-        probe: dict[str, Any] = {"at": now().isoformat(), "verified": False}
+        probe: dict[str, Any] = {
+            "at": now().isoformat(),
+            "verified": False,
+            "build": settings.build_version,
+        }
         try:
             if venue == Venue.KALSHI:
                 path = "/trade-api/v2/portfolio/balance"
@@ -236,3 +287,78 @@ async def refresh_account_evidence(store: Store, client: httpx.AsyncClient) -> N
                 venue=venue,
                 payload=payload,
             )
+    if settings.kalshi_api_key is not None and settings.kalshi_private_key is not None:
+        await refresh_kalshi_scope(store, client)
+
+
+async def refresh_kalshi_scope(store: Store, client: httpx.AsyncClient) -> None:
+    settings = store.settings
+    key = settings.kalshi_api_key
+    if key is None:
+        raise VenueError("KALSHI_KEY_SCOPE_CREDENTIAL_REQUIRED")
+    evidence: dict[str, Any] = {
+        "at": now().isoformat(),
+        "trading_scope": "unverified",
+        "build": settings.build_version,
+    }
+    try:
+        path = "/trade-api/v2/api_keys"
+        host = (
+            "https://external-api.kalshi.com"
+            if settings.kalshi_environment == "production"
+            else "https://external-api.demo.kalshi.co"
+        )
+        response = await client.get(host + path, headers=kalshi_headers(settings, path), timeout=15)
+        if not response.is_success:
+            raise VenueError(f"KEY_SCOPE_HTTP_{response.status_code}")
+        data = decode(response.text)
+        if not isinstance(data, dict) or not isinstance(data.get("api_keys"), list):
+            raise VenueError("INVALID_KEY_SCOPE_RESPONSE")
+        keys = [
+            row
+            for row in data["api_keys"]
+            if isinstance(row, dict) and row.get("api_key_id") == key.get_secret_value()
+        ]
+        if len(keys) != 1 or not isinstance(keys[0].get("scopes"), list):
+            raise VenueError("CURRENT_KEY_SCOPE_UNAVAILABLE")
+        scopes = keys[0]["scopes"]
+        if any(not isinstance(value, str) for value in scopes):
+            raise VenueError("INVALID_KEY_SCOPE_RESPONSE")
+        evidence["trading_scope"] = (
+            "verified" if {"write", "write::trade"} & set(scopes) else "restricted"
+        )
+        subaccount = keys[0].get("subaccount")
+        if subaccount is not None and (type(subaccount) is not int or not 0 <= subaccount <= 63):
+            raise VenueError("INVALID_KEY_BINDING_RESPONSE")
+        evidence["binding_status"] = (
+            "institutional_subtrader"
+            if keys[0].get("fcm_subtrader_id")
+            else "bound_subaccount"
+            if subaccount not in (None, 0)
+            else "primary_account"
+        )
+        if evidence["binding_status"] == "institutional_subtrader":
+            evidence["trading_scope"] = "restricted"
+        expiry = data.get("api_key_region_expiration_ts")
+        if expiry is not None and type(expiry) is not int:
+            raise VenueError("INVALID_KEY_REGION_EXPIRY")
+        evidence["region_expiration_ts"] = expiry
+        if settings.kalshi_environment != "production":
+            evidence["trading_scope"] = "unverified"
+            evidence["error"] = "DEMO_ACCOUNT_NOT_PRODUCTION"
+    except (VenueError, ValueError, TypeError, httpx.HTTPError) as exc:
+        code = exc.code if isinstance(exc, VenueError) else type(exc).__name__
+        evidence["error"] = code
+        log.warning("key_scope_probe_failed", venue=Venue.KALSHI, error_code=code)
+        await store.system_error("eligibility", code)
+    async with store.sessions.begin() as session:
+        identifier = f"{store.source}:{Venue.KALSHI}"
+        previous = await session.get(EligibilityRow, identifier, with_for_update=True)
+        await upsert(
+            session,
+            EligibilityRow,
+            identifier,
+            source=store.source,
+            venue=Venue.KALSHI,
+            payload={**(previous.payload if previous else {}), "key_scope": evidence},
+        )

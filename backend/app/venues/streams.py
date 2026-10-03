@@ -2,7 +2,7 @@ import asyncio
 import base64
 import json
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,6 +16,8 @@ from app.pricing import BookIntegrityError, LocalBook, complementary_book, order
 from app.venues.clients import us_books
 from app.venues.http import VenueError, decode
 from app.venues.schemas import USBook
+
+StreamObserver = Callable[[list[str], str], None]
 
 
 def kalshi_headers(settings: Settings, path: str = "/trade-api/ws/v2") -> dict[str, str]:
@@ -150,7 +152,11 @@ class KalshiStreamState:
         )
 
 
-async def kalshi_stream(settings: Settings, markets: list[Market]) -> AsyncIterator[list[Book]]:
+async def kalshi_stream(
+    settings: Settings,
+    markets: list[Market],
+    observer: StreamObserver | None = None,
+) -> AsyncIterator[list[Book]]:
     url = (
         "wss://external-api-ws.kalshi.com/trade-api/ws/v2"
         if settings.kalshi_environment == "production"
@@ -177,6 +183,8 @@ async def kalshi_stream(settings: Settings, markets: list[Market]) -> AsyncItera
                 }
             )
         )
+        if observer:
+            observer([market.id for market in markets], "subscription_requested")
         await socket.send(
             json.dumps(
                 {
@@ -188,8 +196,24 @@ async def kalshi_stream(settings: Settings, markets: list[Market]) -> AsyncItera
         )
         while True:
             raw = await asyncio.wait_for(socket.recv(), timeout=30)
-            books = state.apply(decode(str(raw)))
+            data = decode(str(raw))
+            if observer and data.get("type") == "error":
+                observer([market.id for market in markets], "subscription_rejected")
+            if (
+                observer
+                and data.get("type") == "subscribed"
+                and data.get("msg", {}).get("channel") == "orderbook_delta"
+            ):
+                observer([market.id for market in markets], "subscription_confirmed")
+            books = state.apply(data)
             if books:
+                if observer:
+                    observer(
+                        list({book.market_id for book in books}),
+                        "book_received"
+                        if all(book.connected for book in books)
+                        else "market_not_open",
+                    )
                 yield books
 
 
@@ -244,7 +268,10 @@ class InternationalStreamState:
         return []
 
 
-async def international_stream(markets: list[Market]) -> AsyncIterator[list[Book]]:
+async def international_stream(
+    markets: list[Market],
+    observer: StreamObserver | None = None,
+) -> AsyncIterator[list[Book]]:
     state = InternationalStreamState(markets)
     async with connect(
         "wss://ws-subscriptions-clob.polymarket.com/ws/market",
@@ -263,6 +290,8 @@ async def international_stream(markets: list[Market]) -> AsyncIterator[list[Book
                 }
             )
         )
+        if observer:
+            observer([market.id for market in markets], "subscription_requested")
 
         async def heartbeat() -> None:
             while True:
@@ -279,13 +308,19 @@ async def international_stream(markets: list[Market]) -> AsyncIterator[list[Book
                 for item in data if isinstance(data, list) else [data]:
                     books = state.apply(item)
                     if books:
+                        if observer:
+                            observer(list({book.market_id for book in books}), "book_received")
                         yield books
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
 
-async def us_stream(settings: Settings, markets: list[Market]) -> AsyncIterator[list[Book]]:
+async def us_stream(
+    settings: Settings,
+    markets: list[Market],
+    observer: StreamObserver | None = None,
+) -> AsyncIterator[list[Book]]:
     by_slug = {x.external_id: x for x in markets}
     async with connect(
         "wss://api.polymarket.us/v1/ws/markets",
@@ -307,8 +342,27 @@ async def us_stream(settings: Settings, markets: list[Market]) -> AsyncIterator[
                     }
                 )
             )
+            if observer:
+                observer(
+                    [market.id for market in markets[index : index + 100]], "subscription_requested"
+                )
         while True:
             data = decode(str(await asyncio.wait_for(socket.recv(), timeout=30)))
+            if "error" in data:
+                if observer:
+                    observer([market.id for market in markets], "subscription_rejected")
+                raise VenueError("US_SUBSCRIPTION_ERROR")
             if "marketData" in data:
-                market = by_slug[data["marketData"]["marketSlug"]]
-                yield us_books(market, USBook.model_validate(data), "websocket")
+                slug = data["marketData"]["marketSlug"]
+                if slug not in by_slug:
+                    raise VenueError("US_UNREQUESTED_MARKET_SLUG")
+                market = by_slug[slug]
+                books = us_books(market, USBook.model_validate(data), "websocket")
+                if observer:
+                    observer(
+                        [market.id],
+                        "book_received"
+                        if all(book.connected for book in books)
+                        else "market_not_open",
+                    )
+                yield books

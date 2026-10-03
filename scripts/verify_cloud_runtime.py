@@ -159,7 +159,7 @@ async def main(review_shortlist=False):
             raise RuntimeError("CLOUD_CROSS_VENUE_DISCOVERY_INCOMPLETE")
         if not payload["fresh_synchronized_books"]:
             raise RuntimeError("CLOUD_FRESH_BOOKS_UNAVAILABLE")
-        if schema != "6e9f3a2c7d10":
+        if schema != "93ad7c201b46":
             raise RuntimeError("CLOUD_VALIDATION_SCHEMA_MISSING")
         if not validation["fresh_diagnostics"] or not validation["candidate_pairs"]:
             raise RuntimeError("CLOUD_VALIDATION_DIAGNOSTICS_UNAVAILABLE")

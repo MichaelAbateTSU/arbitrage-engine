@@ -196,11 +196,12 @@ class Store:
                     )
                 )
 
-    async def markets(self) -> list[Market]:
+    async def markets(self, market_ids: list[str] | None = None) -> list[Market]:
         async with self.sessions() as session:
-            rows = (
-                await session.scalars(select(MarketRow).where(MarketRow.source == self.source))
-            ).all()
+            query = select(MarketRow).where(MarketRow.source == self.source)
+            if market_ids is not None:
+                query = query.where(MarketRow.id.in_(market_ids))
+            rows = (await session.scalars(query)).all()
             return [Market.model_validate(row.payload) for row in rows]
 
     async def save_match(self, match: Match, market: Market) -> None:
@@ -245,15 +246,14 @@ class Store:
                 current=True,
             )
 
-    async def matches(self) -> list[Match]:
+    async def matches(self, match_ids: list[str] | None = None) -> list[Match]:
         async with self.sessions() as session:
-            rows = (
-                await session.scalars(
-                    select(MatchRow).where(
-                        MatchRow.source == self.source, MatchRow.current.is_(True)
-                    )
-                )
-            ).all()
+            query = select(MatchRow).where(
+                MatchRow.source == self.source, MatchRow.current.is_(True)
+            )
+            if match_ids is not None:
+                query = query.where(MatchRow.id.in_(match_ids))
+            rows = (await session.scalars(query)).all()
             return [Match.model_validate(row.payload) for row in rows]
 
     async def save_books(self, books: list[Book]) -> None:
@@ -299,13 +299,12 @@ class Store:
                 .on_conflict_do_nothing(index_elements=["id"])
             )
 
-    async def books(self) -> dict[tuple[str, Side], Book]:
+    async def books(self, market_ids: list[str] | None = None) -> dict[tuple[str, Side], Book]:
         async with self.sessions() as session:
-            rows = (
-                await session.scalars(
-                    select(CurrentBookRow).where(CurrentBookRow.source == self.source)
-                )
-            ).all()
+            query = select(CurrentBookRow).where(CurrentBookRow.source == self.source)
+            if market_ids is not None:
+                query = query.where(CurrentBookRow.market_id.in_(market_ids))
+            rows = (await session.scalars(query)).all()
             return {
                 (row.market_id, Side(row.outcome)): Book.model_validate(row.payload) for row in rows
             }

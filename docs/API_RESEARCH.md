@@ -100,7 +100,8 @@ rate limits. Retail gateway OpenAPI version **1.0.0**.
 - Settlement: `/v1/markets/{slug}/settlement`; documented 404 means absent/not settled.
 - US stream: `wss://api.polymarket.us/v1/ws/markets`, authenticated Ed25519 header.
 - Full market-data stream delivers snapshots; subscribe in batches of <=100.
-- Current fee effective Sept 25: coefficient 0.0695; banker's cent rounding;
+- Rechecked October 3: current schedule effective October 1, 2026, 10 AM ET;
+  coefficient 0.0695; banker's cent rounding;
   no volume rebate assumed. Table-tennis change excluded with unsupported leagues.
 - 20 requests/sec public limit; application defaults to shared 5/sec.
 
@@ -155,6 +156,47 @@ Polymarket `/v1/account/balances`. The former accepts portfolio-balance read
 scope, so its success is deliberately not order-permission proof. Buying power
 is parsed as Decimal without monetary float conversion. International market
 fees remain sourced from the applicable market parameters, never assumed zero.
+
+## Focused validation recheck (October 3, 2026)
+
+The supported US integration is **retail**: `/v1/ws/markets`, market slugs,
+`SUBSCRIPTION_TYPE_MARKET_DATA`, `marketData` full books and public gateway
+`/v1/markets/{slug}/book`. The user's linked Data Guide describes separate
+institutional symbol/orderbook/gRPC and identity/account surfaces; those are not
+drop-in replacements for this connection. Subscription requests and data delivery
+are tracked independently; undocumented acknowledgement envelopes are not
+invented.
+
+Kalshi's GET `/trade-api/v2/api_keys` documents current-key `read`, `write` and
+`write::trade` scopes, optional subaccount/FCM bindings and account location
+attestation expiry. The signed GET-only probe compares the configured key in
+memory and retains only sanitized verdicts, never key IDs/names/responses.
+Primary-account balance evidence cannot certify a different bound subaccount.
+Freshness also binds to the deployed build so a credential/configuration rollout
+cannot reuse the preceding release's access verdict.
+
+Polymarket US retail balance reads do not expose an authoritative account/KYC
+trading-permission flag. The pipeline leaves that evidence unknown rather than
+using an institutional endpoint or sending a preview/order.
+US withdrawal documentation describes several methods and clearing/original
+funding-source constraints; a generic fee statement does not identify this
+operator's payment method, FX path, network fee or allocated transfer expense.
+Component cost proof therefore remains explicitly operator-evidenced/expiring.
+
+Public retail rule snapshots on October 3 included **two weeks for NFL** but
+**two calendar days for NBA**, not a universal two-week sports rule. Neither
+calendar days nor rescheduling-to-a-date is automatically equivalent to Kalshi's
+48-hour game-start condition. Independently selected fair-market-price fallback
+still lacks a verified cross-venue complementary payout constraint even where
+deadline windows appear similar.
+
+Sources:
+https://docs.kalshi.com/api-reference/api-keys/get-api-keys
+https://docs.polymarket.us/api-reference/websocket/markets
+https://docs.polymarket.us/data-guide/overview
+https://docs.polymarket.us/learn/deposits/withdraw-funds/overview
+https://docs.polymarket.us/learn/trading/access-and-limits/trading-restrictions
+https://docs.polymarket.us/fees
 
 Additional references:
 https://docs.kalshi.com/getting_started/orderbook_responses

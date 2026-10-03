@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { z } from "zod";
+import { CostEvidence } from "./CostEvidence";
+import { FocusedEvidence } from "./FocusedEvidence";
 import { api, money, reason, time, useData } from "./api";
 import {
   Badge,
@@ -18,7 +20,6 @@ import {
   eligibilitySchema,
   objectSchema,
   page,
-  riskResponseSchema,
   validationSettingsSchema,
   validationSummarySchema,
 } from "./schemas";
@@ -124,11 +125,26 @@ export function Validation({
         />
       ),
     },
+    {
+      id: "worst-case",
+      header: "All-scenario net floor",
+      cell: ({ row }) =>
+        row.original.settlement_adjusted_net_profit == null
+          ? "Unproven"
+          : money(row.original.settlement_adjusted_net_profit),
+    },
   ];
   if (summary.isPending) return <Loading />;
   return (
     <>
       <ErrorBox error={summary.error ?? query.error} />
+      {summary.data && (
+        <FocusedEvidence
+          value={summary.data.focused_validation}
+          collectionStarted={summary.data.collection_started_at}
+          onReview={onReview}
+        />
+      )}
       <Panel
         title="Why did the candidates not qualify?"
         subtitle="Counts are distinct pairs, not repeated observations. Price math never overrides missing settlement or eligibility evidence."
@@ -211,6 +227,16 @@ export function Validation({
             data={selected.fee_evidence}
           />
           <SettlementMatrix value={selected.settlement_proof} />
+          <p>
+            All-scenario net floor:{" "}
+            {selected.settlement_adjusted_net_profit == null
+              ? "Unproven"
+              : money(selected.settlement_adjusted_net_profit)}
+            . Bounded-scenarios-only net floor:{" "}
+            {money(selected.known_scenario_net_floor)}. The latter is not an
+            all-scenario guarantee; missing costs and one-leg execution failures
+            remain separate.
+          </p>
         </Panel>
       )}
       <Panel
@@ -224,8 +250,8 @@ export function Validation({
         </div>
       </Panel>
       <Panel
-        title="20-pair settlement review shortlist"
-        subtitle="Ranked by same-currency venue and observed depth. Selection is not approval. Unknown rules stay blocked."
+        title="Focused individual settlement review"
+        subtitle="Family-first selection is not approval. Historical shortlist IDs are retained in configuration; source/hash changes invalidate individual proofs."
       >
         {summary.data?.shortlist.map((value) => (
           <div className="actions" key={value.match_id}>
@@ -327,7 +353,7 @@ export function SettlementMatrix({
             <tr>
               <th>Kalshi direction</th>
               <th>Scenario</th>
-              <th>Combined payout</th>
+              <th>Combined payout bounds</th>
               <th>Covered</th>
             </tr>
           </thead>
@@ -336,7 +362,11 @@ export function SettlementMatrix({
               <tr key={`${row.direction}:${row.scenario}`}>
                 <td>{row.direction}</td>
                 <td>{row.scenario}</td>
-                <td>{row.combined_payout ?? "unknown"}</td>
+                <td>
+                  {row.minimum_payout === undefined
+                    ? (row.combined_payout ?? "unknown")
+                    : `${row.minimum_payout ?? "unknown"} to ${row.maximum_payout ?? "unknown"}`}
+                </td>
                 <td>{row.covered ? "Yes" : "No"}</td>
               </tr>
             ))}
@@ -410,6 +440,15 @@ function EligibilityCard({
         KYC/order-permission proof.
       </p>
       <Reasons reasons={value.reasons} />
+      <p>
+        API key trading scope: {value.key_trading_scope ?? "unverified"}. Key
+        location attestation: {value.key_region_status ?? "unknown"}. Key
+        binding: {value.key_binding_status ?? "unverified"}.
+        {value.permission_evidence_limitation}
+      </p>
+      {value.key_scope_probe_error && (
+        <Reasons reasons={[value.key_scope_probe_error]} />
+      )}
       <details>
         <summary>
           Independent account eligibility attestation (expires after 7 days)
@@ -522,90 +561,5 @@ function ShadowSettings({
 }
 
 function CostSettings({ csrf }: { csrf?: string }) {
-  const risk = useData("/settings/risk", riskResponseSchema);
-  const [costs, setCosts] = useState("");
-  const [note, setNote] = useState("");
-  const [error, setError] = useState<Error | null>(null);
-  const [busy, setBusy] = useState(false);
-  const client = useQueryClient();
-  async function save() {
-    if (!risk.data) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const parsed: unknown = JSON.parse(costs);
-      const extra = z
-        .record(
-          z.string(),
-          z.object({
-            verified: z.boolean(),
-            settlement_per_contract: z.string(),
-            rebalancing_per_contract: z.string(),
-            fixed_per_leg: z.string(),
-            evidence: z.string(),
-          }),
-        )
-        .parse(parsed);
-      await api("/settings/risk", riskResponseSchema, {
-        method: "PUT",
-        headers: { "X-CSRF-Token": csrf ?? "" },
-        body: JSON.stringify({
-          revision: risk.data.revision,
-          settings: { ...risk.data.settings, additional_costs: extra },
-          reason: note,
-        }),
-      });
-      await client.invalidateQueries();
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught : new Error("Cost assumptions failed"),
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <Panel
-      title="Verify additional costs before calling a spread profitable"
-      subtitle="Unknown settlement/rebalancing costs block qualification. Zero costs need evidence too."
-    >
-      <p>
-        Per-venue JSON fields: verified, settlement_per_contract,
-        rebalancing_per_contract, fixed_per_leg, evidence. Monetary values must
-        be decimal strings.
-      </p>
-      <label>
-        Cost assumptions JSON
-        <textarea
-          rows={8}
-          value={costs}
-          placeholder={JSON.stringify(
-            {
-              kalshi: {
-                verified: false,
-                settlement_per_contract: "0",
-                rebalancing_per_contract: "0",
-                fixed_per_leg: "0",
-                evidence: "",
-              },
-            },
-            null,
-            2,
-          )}
-          onChange={(event) => setCosts(event.target.value)}
-        />
-      </label>
-      <label>
-        Change reason{" "}
-        <input value={note} onChange={(event) => setNote(event.target.value)} />
-      </label>
-      <ErrorBox error={error ?? risk.error} />
-      <button
-        disabled={!csrf || busy || !note.trim()}
-        onClick={() => void save()}
-      >
-        Save verified cost evidence
-      </button>
-    </Panel>
-  );
+  return <CostEvidence csrf={csrf} />;
 }

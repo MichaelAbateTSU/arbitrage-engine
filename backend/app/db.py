@@ -177,6 +177,22 @@ class ValidationConfigRow(Record, Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
 
 
+class RuleFamilyRow(Record, Base):
+    __tablename__ = "validation_rule_families"
+
+
+class BookMonitorRow(Record, Base):
+    __tablename__ = "validation_book_monitoring"
+    market_id: Mapped[str] = mapped_column(String(160), index=True)
+
+
+class CoverageRow(Record, Base):
+    __tablename__ = "validation_observation_coverage"
+    match_id: Mapped[str] = mapped_column(String(160), index=True)
+    day: Mapped[str] = mapped_column(String(10), index=True)
+    __table_args__ = (UniqueConstraint("source", "match_id", "day"),)
+
+
 class AuditRow(Record, Base):
     __tablename__ = "audit_events"
     actor: Mapped[str] = mapped_column(String(64))

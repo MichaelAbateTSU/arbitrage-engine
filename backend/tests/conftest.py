@@ -54,7 +54,7 @@ async def store(tmp_path) -> AsyncIterator[Store]:
         await connection.execute(
             text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         )
-        await connection.execute(text("INSERT INTO alembic_version VALUES ('6e9f3a2c7d10')"))
+        await connection.execute(text("INSERT INTO alembic_version VALUES ('93ad7c201b46')"))
     result = Store(sessions, settings)
     await result.initialize()
     for market in demo_markets():

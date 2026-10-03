@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import { Badge, DataTable, Empty, ErrorBox, Reasons } from "../src/components";
 import {
   decimal,
+  costComponentSchema,
+  focusedValidationSchema,
   eligibilitySchema,
   opportunitySchema,
   riskSchema,
 } from "../src/schemas";
 import { money, percent, time } from "../src/api";
 import { SettlementMatrix } from "../src/Validation";
+import { FocusedEvidence } from "../src/FocusedEvidence";
 
 describe("fail-closed client schemas", () => {
   it("rejects floating point financial responses", () => {
@@ -103,5 +106,80 @@ describe("dashboard evidence and states", () => {
     expect(screen.getByText("Coverage not proven")).toBeVisible();
     expect(screen.getByText("unknown")).toBeVisible();
     expect(screen.getByText("No", { exact: true })).toBeVisible();
+  });
+  it("shows bounded and unknown scenario payouts without inventing a guarantee", () => {
+    render(
+      <SettlementMatrix
+        value={{
+          proven: false,
+          reasons: ["UNKNOWN_DISCRETIONARY_SETTLEMENT"],
+          scenarios: [
+            {
+              direction: "NO",
+              scenario: "discretionary_settlement",
+              combined_payout: null,
+              minimum_payout: "0",
+              maximum_payout: "2",
+              covered: false,
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("0 to 2")).toBeVisible();
+    expect(screen.getByText("Coverage not proven")).toBeVisible();
+  });
+  it("preserves the original start and labels blocked coverage as inconclusive", () => {
+    const value = focusedValidationSchema.parse({
+      families: [],
+      family_counts: {},
+      family_review_limit: 20,
+      focused_pairs: [],
+      focus_scope: "diagnostic_only",
+      screen_conclusion: "No compatible profile found.",
+      cost_evidence: {},
+      coverage: {
+        tracking_started_at: "2026-10-03T16:30:00Z",
+        pair_seconds: { fully_eligible_observed: "0", usable_books: "1.25" },
+        pair_count: 1,
+        verdict: "inconclusive_no_fully_evidenced_coverage",
+        method: "Lower bound, not wall-clock seconds",
+        historical_coverage_before_tracking: "unknown_not_reconstructed",
+        by_pair: [],
+      },
+    });
+    render(
+      <FocusedEvidence
+        value={value}
+        collectionStarted="2026-10-03T08:03:46Z"
+        onReview={() => undefined}
+      />,
+    );
+    expect(screen.getByText(/2026-10-03T08:03:46Z/)).toBeVisible();
+    expect(
+      screen.getByText(/Inconclusive no fully evidenced coverage/),
+    ).toBeVisible();
+    expect(screen.getByText(/not tradable candidates/)).toBeVisible();
+    expect(screen.getByText("0.0 pair-s")).toBeVisible();
+    expect(screen.getByText(/No clock was restarted/)).toBeVisible();
+  });
+  it("accepts only explicit component statuses and exact decimal amounts", () => {
+    const component = {
+      status: "not_applicable",
+      amount: "0",
+      basis: "per_leg",
+      execution_path: "Already funded USD test account",
+      evidence: "Test source",
+      observed_at: "2026-10-03T16:30:00Z",
+      expires_at: "2026-10-04T16:30:00Z",
+    };
+    expect(costComponentSchema.safeParse(component).success).toBe(true);
+    expect(
+      costComponentSchema.safeParse({ ...component, amount: 0 }).success,
+    ).toBe(false);
+    expect(
+      costComponentSchema.safeParse({ ...component, status: "assumed_free" })
+        .success,
+    ).toBe(false);
   });
 });

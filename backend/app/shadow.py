@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 from decimal import ROUND_FLOOR
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 
@@ -28,9 +28,14 @@ from app.store import Store, audit
 from app.validation import CandidateValidation, validation_settings
 
 
-def extras(market: Market, risk: RiskSettings, filled: D) -> D:
+def extras(
+    market: Market,
+    risk: RiskSettings,
+    filled: D,
+    operation: Literal["opening", "unwind"] = "opening",
+) -> D:
     return (
-        risk.additional_costs.get(market.venue, AdditionalCosts()).total(filled)
+        risk.additional_costs.get(market.venue, AdditionalCosts()).total(filled, operation)
         if filled
         else D("0")
     )
@@ -83,6 +88,12 @@ def complete_trial(
         reasons.append("BOOK_TIME_SKEW")
     if not a.fee.known_at(instant) or not b.fee.known_at(instant):
         reasons.append("UNKNOWN_FEE")
+    if a.source == "public" and any(
+        not risk.additional_costs.get(m.venue, AdditionalCosts()).known_at(instant) for m in (a, b)
+    ):
+        reasons.append("COST_EVIDENCE_EXPIRED_AT_FILL")
+    if any(m.instrument_mapping_error() for m in (a, b)):
+        reasons.append("INSTRUMENT_MAPPING_INVALID")
     if reasons:
         return "EXPIRED", {
             **payload,
@@ -200,8 +211,11 @@ def unwind_trial(
             levels = []
     recovered = cost(levels)
     exit_fee = fee(levels, market.fee) if levels else D("0")
+    exit_extra = extras(market, risk, quantity(levels), "unwind")
     residual = excess - quantity(levels)
-    profit = min(one.quantity, two.quantity) + recovered - D(payload["spent"]) - exit_fee
+    profit = (
+        min(one.quantity, two.quantity) + recovered - D(payload["spent"]) - exit_fee - exit_extra
+    )
     profit -= (one.cost + two.cost + recovered) * risk.slippage_bps / 10000
     held_pair = min(one.quantity, two.quantity) > 0
     state = "RESIDUAL_EXPOSURE" if residual else ("HEDGED_AFTER_UNWIND" if held_pair else "UNWOUND")
@@ -209,6 +223,10 @@ def unwind_trial(
         **payload,
         "unwind_proceeds": str(recovered),
         "unwind_fee": str(exit_fee),
+        "unwind_additional_cost": str(exit_extra),
+        "unwind_cost_evidence_known": risk.additional_costs.get(
+            market.venue, AdditionalCosts()
+        ).known_at(instant),
         "unwind_levels": [level.model_dump(mode="json") for level in levels],
         "unwind_market_id": market.id,
         "unwind_quantity": str(quantity(levels)),
@@ -250,6 +268,7 @@ def settle_trial(
         + D(payload.get("unwind_proceeds", "0"))
         - D(payload["spent"])
         - D(payload.get("unwind_fee", "0"))
+        - D(payload.get("unwind_additional_cost", "0"))
         - D(payload.get("execution_slippage", "0"))
     )
     return {

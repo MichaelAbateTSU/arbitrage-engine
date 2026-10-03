@@ -442,3 +442,86 @@ deliberately conservative parser. Source review must distinguish that from
 truly absent evidence rather than auto-filling unknowns. The exported inspection
 retained the exact rule hashes; no operator attestation, source annotation,
 human-review flag or approval was fabricated.
+
+## 24. Focused defensible-validation phase
+
+The next implementation replaces a broad blocked watchlist with a bounded
+family-first screen, explicit instrument/cost evidence and persistent usable
+coverage. Migration `93ad7c201b46` adds policy-family, instrument-monitoring and
+daily coverage tables without resetting validation configuration creation time.
+The original collection clock and the old 20-pair selection are retained.
+
+Scenario matrices now bound normal winners, ties, cancellation/void, postponement
+within/between/beyond policy windows and discretionary decisions. They distinguish
+unknown bounds from the conservative 0..2 combined envelope for independently
+chosen binary fair-price payouts. The envelope does not assert an attained
+outcome; it shows that no tighter cross-venue hedge floor has been verified.
+Pricing distinguishes conditional unit-payout profit, the known bounded-scenario
+net floor and the complete all-scenario net floor (unknown if any scenario lacks
+evidence). Full governing-terms review can attest that discretionary exceptions
+are excluded, but cannot contradict fair-price language in the source.
+Ordinary paper detection and delayed shadow fills share these fail-closed gates.
+
+Family screens include matched candidates and bounded inventory-only rule samples
+for other overlapping leagues. An inventory-only sample is not fabricated into
+an event pair. Families never create approvals. The default focused sample uses
+five distinct events, bounded to 5-10 when configured, with compatible/unproven
+potentially eligible families first. If none has candidates, non-close-only
+representatives are labeled diagnostic-only. Exact source/hash changes retire
+old proofs and refresh selection; legacy watchlist IDs remain available.
+
+Instrument evidence identifies monitoring-cap exclusion, invalid metadata/token
+mapping, actual subscription request/confirmation/rejection, closed state,
+missing snapshot, stale book and invalid reconstruction. Socket observers only
+enqueue compact status; separate persistence never blocks reconstruction. Public
+REST probes independently report endpoint response, depth and unchanged source
+age, without replacing sequenced stream state. Generation/integrity epochs prevent
+usable-time credit across reconnects or short invalid intermediate states.
+
+Cost models distinguish verified amount, verified zero, not applicable and
+unknown for funding, conversion, withdrawal, settlement, rebalancing and network
+expenses. Every verified component identifies its allocation basis/path,
+provenance and expiry. Legacy aggregate charges remain priced but cannot silently
+become six verified zeros; nonzero legacy/new component models cannot coexist.
+Operation-specific opening and emergency-unwind allocations are included in simulated losses and
+are not charged again when held exposure eventually settles.
+
+GET-only Kalshi scope evidence is separate from account-read permission:
+trade scope, primary/subaccount/institutional binding and location-attestation
+expiry are checked without storing any API key ID/name/response. Account and
+scope freshness bind to the active build. Retail US order permission remains
+unknown pending independent evidence; no preview/order is used to test it.
+International US-close-only pairs remain outside the automatic executable focus.
+
+Independent subsecond coverage sampling reads only focused records. Persistent
+daily pair-seconds separate settlement approval, usable two-direction books,
+complete financial evidence and funded/eligible observation. Positive funded-size
+spread time and well-observed nonqualifying spread time are separate; distinct
+directional windows use the existing episode-gap policy rather than counting
+every book tick as a new opportunity. Adjacent samples require unchanged evidence,
+generation/epoch and <=2-second gaps, and are clipped to original quote/fee/cost/
+account deadlines. Earlier coverage is explicitly unknown, not reconstructed.
+This is conservative sampled coverage, not proof of atomic order execution.
+
+### Fresh baseline inspection before this release
+
+Read-only Render job `job-db0igdfavr4c73fsf2eg` succeeded. At **2026-10-03
+16:07:30 UTC**, the deployment still had 240 pairs: 56 NFL/US, 70 NBA/US,
+56 NFL/international and 58 NBA/international. All 240 lacked approval/cost
+evidence, 213 lacked one or both monitored books, and 27 directions/pairs with
+priced evidence also showed stale/skewed books and no gross spread. Counts
+overlap and are observations, not promised current totals.
+
+Representative GET-only books resolved successfully using the actual Kalshi
+ticker and retail US slug: Detroit/Carolina NFL and Golden State/LA Clippers NBA.
+The US source timestamp ages were approximately 146 seconds and 434 seconds,
+respectively; those responses were not genuinely empty books, and their timestamps
+were not refreshed. This does not retroactively prove why every missing
+subscription failed; the new per-instrument records make subsequent causes
+auditable.
+
+The NBA US sample uses two calendar days, unlike the NFL sample's two weeks.
+Both still contain independent fair-price fallback and do not establish a
+constant complementary payout. No approval, free-cost assertion, account
+permission or profitable real trading edge has been fabricated. A zero-result
+period without fully evidenced eligible coverage is explicitly inconclusive.

@@ -27,6 +27,7 @@ from app.db import (
 from app.demo import demo_books, demo_markets
 from app.domain import Book, Side, Venue, now
 from app.eligibility import refresh_account_evidence
+from app.focused import coverage_tick, instrument_mapping_issue, monitor_updates
 from app.pricing import BookIntegrityError
 from app.service import analysis_tick, paper_tick, rematch_all
 from app.shadow import shadow_tick
@@ -191,7 +192,41 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
                 x.id,
             )
         )
-        markets = markets[: settings.max_monitored_markets]
+        universe = markets
+        mapping_issues = {market.id: instrument_mapping_issue(market) for market in universe}
+        markets = [market for market in markets if mapping_issues[market.id] is None][
+            : settings.max_monitored_markets
+        ]
+        generation = uuid4().hex
+        selected_ids = {market.id for market in markets}
+        await monitor_updates(
+            store,
+            {
+                market.id: {
+                    "selection": (
+                        "excluded_invalid_mapping"
+                        if mapping_issues[market.id]
+                        else "selected"
+                        if market.id in selected_ids
+                        else "excluded_by_cap"
+                    ),
+                    "selection_at": now().isoformat(),
+                    "generation": generation,
+                    "priority": "focused_pair" if market.id in watched else "general_universe",
+                    "instrument": market.external_id,
+                    "cap": settings.max_monitored_markets,
+                    "subscription": "not_requested",
+                    "mapping": "invalid"
+                    if mapping_issues[market.id]
+                    else "metadata_only_unverified",
+                    "mapping_error": mapping_issues[market.id],
+                    "market_state": "unknown",
+                    "stream_error": None,
+                    "integrity_epoch": 0,
+                }
+                for market in universe
+            },
+        )
         if not markets:
             await store.health(client.venue, feed="waiting_for_discovery", monitored=0)
             await asyncio.sleep(5)
@@ -212,23 +247,101 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
         )
         try:
             if streaming:
+                events: dict[str, dict[str, object]] = {}
+                epochs: dict[str, int] = {}
+
+                def observe(
+                    identifiers: list[str],
+                    event: str,
+                    queue: dict[str, dict[str, object]] = events,
+                    current_generation: str = generation,
+                    current_epochs: dict[str, int] = epochs,
+                ) -> None:
+                    for identifier in identifiers:
+                        value = queue.setdefault(identifier, {})
+                        value["generation"] = current_generation
+                        if event == "market_not_open":
+                            current_epochs[identifier] = current_epochs.get(identifier, 0) + 1
+                        value["integrity_epoch"] = current_epochs.get(identifier, 0)
+                        if event.startswith("subscription_"):
+                            value["subscription"] = event.removeprefix("subscription_")
+                            value["subscription_at"] = now().isoformat()
+                        elif event == "book_received":
+                            value["subscription"] = "confirmed_by_data"
+                            value["mapping"] = "verified_by_stream_data"
+                            value["last_stream_book_at"] = now().isoformat()
+                            value["market_state"] = "open"
+                        elif event == "market_not_open":
+                            value["market_state"] = "not_open"
+
+                async def flush_monitoring(
+                    queue: dict[str, dict[str, object]] = events,
+                ) -> None:
+                    while True:
+                        await asyncio.sleep(0.5)
+                        values = dict(queue)
+                        queue.clear()
+                        await monitor_updates(store, values)
+
                 generator = (
-                    international_stream(markets)
+                    international_stream(markets, observe)
                     if client.venue == Venue.INTERNATIONAL
                     else (
-                        kalshi_stream(settings, markets)
+                        kalshi_stream(settings, markets, observe)
                         if client.venue == Venue.KALSHI
-                        else us_stream(settings, markets)
+                        else us_stream(settings, markets, observe)
                     )
                 )
                 # Periodic reconnect requests an authoritative snapshot and revised
                 # universe. No REST snapshot is raced against an unsequenced delta.
                 async with asyncio.timeout(settings.discovery_interval_seconds):
-                    await persist_stream(store, client, generator, len(markets), reconnects)
+                    writer = asyncio.create_task(flush_monitoring())
+                    persistence = asyncio.create_task(
+                        persist_stream(store, client, generator, len(markets), reconnects)
+                    )
+                    try:
+                        completed, _ = await asyncio.wait(
+                            (writer, persistence), return_when=asyncio.FIRST_COMPLETED
+                        )
+                        for task in completed:
+                            await task
+                        if writer in completed:
+                            raise RuntimeError("MONITORING_WRITER_STOPPED")
+                    finally:
+                        writer.cancel()
+                        persistence.cancel()
+                        await asyncio.gather(writer, persistence, return_exceptions=True)
+                        await monitor_updates(store, events)
             else:
                 for market in markets:
+                    mapping_error = instrument_mapping_issue(market)
+                    if mapping_error:
+                        await monitor_updates(
+                            store,
+                            {
+                                market.id: {
+                                    "mapping": "invalid",
+                                    "mapping_error": mapping_error,
+                                    "rest_probe": {
+                                        "at": now().isoformat(),
+                                        "status": "not_sent_invalid_mapping",
+                                        "error_code": mapping_error,
+                                    },
+                                }
+                            },
+                        )
+                        continue
                     books = await client.get_orderbooks(market)
                     await store.save_books(books)
+                    await monitor_updates(
+                        store,
+                        {
+                            market.id: {
+                                "subscription": "rest_only",
+                                "last_rest_book_at": now().isoformat(),
+                            }
+                        },
+                    )
                     BOOKS.labels(client.venue).inc(len(books))
                     await store.health(
                         client.venue,
@@ -242,12 +355,30 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
         except TimeoutError:
             await store.invalidate_books(ids)
             await store.health(client.venue, feed="resnapshot", reconnects=reconnects)
+            await monitor_updates(
+                store,
+                {
+                    identifier: {
+                        "stream_error": "PERIODIC_AUTHORITATIVE_RESNAPSHOT",
+                    }
+                    for identifier in ids
+                },
+            )
         except (VenueError, ValueError, KeyError, WebSocketException, OSError) as exc:
             reconnects += 1
             await store.invalidate_books(ids)
             code = exc.code if isinstance(exc, VenueError) else type(exc).__name__
             FAILURES.labels("market-data", code).inc()
             await store.health(client.venue, feed="disconnected", error=code, reconnects=reconnects)
+            await monitor_updates(
+                store,
+                {
+                    identifier: {
+                        "stream_error": code,
+                    }
+                    for identifier in ids
+                },
+            )
             log.warning("venue_feed_failed", venue=client.venue, error_code=code)
             await asyncio.sleep(min(60, 2 ** min(reconnects, 6)) + random.uniform(0, 1))
         finally:
@@ -292,6 +423,14 @@ async def market_data(store: Store, settings: Settings) -> None:
                 tasks.create_task(
                     guarded_loop(
                         store,
+                        "focused-book-probes",
+                        lambda: focused_book_probes(store, clients),
+                        60,
+                    )
+                )
+                tasks.create_task(
+                    guarded_loop(
+                        store,
                         "eligibility",
                         lambda: refresh_account_evidence(store, http),
                         300,
@@ -307,6 +446,65 @@ async def market_data(store: Store, settings: Settings) -> None:
                 )
                 for client in clients:
                     tasks.create_task(venue_feed(store, client, settings))
+
+
+async def focused_book_probes(store: Store, clients: list[VenueClient]) -> None:
+    from app.validation import validation_settings
+
+    config, _, _ = await validation_settings(store)
+    if not config.enabled:
+        return
+    matches = [m for m in await store.matches() if m.id in config.selected_match_ids]
+    ids = {identifier for m in matches for identifier in (m.first_market_id, m.second_market_id)}
+    markets = [m for m in await store.markets() if m.id in ids]
+    books = await store.books(list(ids))
+    risk, _ = await store.risk()
+    by_venue = {client.venue: client for client in clients}
+    for market in markets:
+        current = [books.get((market.id, side)) for side in Side]
+        if all(
+            book is not None
+            and book.connected
+            and book.synchronized
+            and book.age_ms(now()) <= risk.max_quote_age_ms
+            for book in current
+        ):
+            continue
+        probe: dict[str, object] = {"at": now().isoformat()}
+        try:
+            observed = await by_venue[market.venue].get_orderbooks(market)
+            probe.update(
+                status="snapshot_received",
+                outcomes=[
+                    {
+                        "side": book.outcome,
+                        "bids": len(book.bids),
+                        "asks": len(book.asks),
+                        "age_ms": book.age_ms(now()),
+                        "received_at": book.received_at.isoformat(),
+                    }
+                    for book in observed
+                ],
+            )
+        except (VenueError, ValueError, KeyError) as exc:
+            code = exc.code if isinstance(exc, VenueError) else type(exc).__name__
+            probe.update(status="failed", error_code=code)
+            await store.system_error("focused-book-probes", code)
+        # An independent REST probe is evidence, not a replacement for a sequenced
+        # WebSocket snapshot; its original venue timestamp is never refreshed.
+        await monitor_updates(
+            store,
+            {
+                market.id: {
+                    "rest_probe": probe,
+                    **(
+                        {"mapping": "verified_by_public_book_endpoint"}
+                        if probe["status"] == "snapshot_received"
+                        else {}
+                    ),
+                }
+            },
+        )
 
 
 async def maintenance_tick(store: Store) -> None:
@@ -415,6 +613,9 @@ async def role_runner(role: str, store: Store, settings: Settings) -> None:
             if role == "market-data":
                 tasks.create_task(market_data(store, settings))
             elif role == "analysis":
+                tasks.create_task(
+                    guarded_loop(store, "observation-coverage", lambda: coverage_tick(store), 0.5)
+                )
                 tasks.create_task(
                     guarded_loop(
                         store,

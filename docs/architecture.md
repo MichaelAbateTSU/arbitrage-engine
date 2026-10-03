@@ -91,6 +91,24 @@ applied in sequence, then latest full normalized books are coalesced in a bounde
 per-market/outcome buffer and flushed at 100ms cadence. Database latency cannot
 stall socket heartbeats; original receive/exchange timestamps are retained.
 
+Focused validation persists versioned policy-family screens, per-instrument
+monitoring and daily observation coverage in three additional record tables.
+Family classification never creates individual approval. Scenario matrices
+separate normal winners, ties, postponement windows, cancellation/void and
+discretionary decisions; unknown bounds and independent fair-price envelopes
+remain unproven. The pricing view shows conditional profit, bounded-scenario
+net floor and all-scenario net floor separately.
+
+Socket callbacks only update bounded in-memory monitoring queues; independent
+writers persist selection/subscription/reconstruction evidence. Feed generations
+and integrity epochs prevent credit across short lifecycle interruptions even
+when the latest valid book coalesces past an invalid intermediate state.
+Focused REST probes are diagnostic evidence, never unsequenced book replacements.
+The coverage task reads only selected matches/markets/books and intersects
+adjacent samples with actual freshness/evidence deadlines. Daily pair-seconds and
+distinct funded-size spread windows survive restarts, preserve the original
+diagnostic start and do not imply atomic execution or automatic live permission.
+
 Application readiness checks PostgreSQL migration version and optional configured
 Redis; venue outages remain separately visible. Detailed snapshots expire after
 seven days, rejections/observations/log events after 180 days, daily aggregates

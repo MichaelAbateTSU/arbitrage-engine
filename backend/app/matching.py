@@ -56,21 +56,27 @@ def extract_rules(text: str, source: str | None = None) -> Rules:
         "overtime": [
             ("including overtime", "included"),
             ("includes overtime", "included"),
+            ("overtime is included if played", "included"),
+            ("including any overtime periods", "included"),
             ("regulation only", "excluded"),
             ("excluding overtime", "excluded"),
         ],
         "draw": [
             ("no draw is possible", "impossible"),
             ("tie the market will resolve to 0 50", "half_refund"),
+            ("tie the market will settle to 0 50", "half_refund"),
             ("draw this market will resolve to no", "no"),
         ],
         "cancellation": [
             ("market will resolve 50 50", "half_refund"),
             ("market will settle to last fair market price", "fair_price"),
             ("market will resolve to a fair price", "fair_price"),
+            ("all markets will resolve to a fair price", "fair_price"),
         ],
         "postponement": [
             ("within 48 hours", "within_48h"),
+            ("within two weeks", "within_two_weeks"),
+            ("within two calendar days", "within_two_calendar_days"),
             ("remain open until the game has been completed", "until_completed"),
             ("settle following the conclusion of the rescheduled match", "until_completed"),
         ],
@@ -87,6 +93,11 @@ def extract_rules(text: str, source: str | None = None) -> Rules:
             data[field] = found[0][1]
             rules.evidence[field] = text
     data["evidence"] = rules.evidence
+    if source is None:
+        result = re.search(r"outcome sourced from ([^.]+)", text, flags=re.IGNORECASE)
+        if result:
+            data["settlement_source"] = normalized(result.group(1))
+            rules.evidence["settlement_source"] = result.group(0)
     return Rules.model_validate(data)
 
 
@@ -159,6 +170,14 @@ def match_markets(first: Market, second: Market, human_reviewed: bool = False) -
         reasons.append("NONCONSTANT_CANCELLATION_PAYOUT")
     if first.rules.payout != 1 or second.rules.payout != 1:
         reasons.append("PAYOUT_MISMATCH")
+    for market in (first, second):
+        if market.source == "public" and market.rules.discretionary_settlement is None:
+            unknown.append("UNKNOWN_DISCRETIONARY_SETTLEMENT")
+        if market.rules.discretionary_settlement == "excluded" and any(
+            phrase in normalized(market.rules_text)
+            for phrase in ("fair price", "fair market price")
+        ):
+            reasons.append("DISCRETIONARY_POLICY_CONTRADICTS_SOURCE")
     if first.rules.draw == "no" or second.rules.draw == "no":
         if first.yes_team != second.yes_team:
             reasons.append("DRAW_BREAKS_INVERTED_COMPLEMENT")

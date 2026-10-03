@@ -8,6 +8,7 @@ from app.auth import reader
 from app.db import EligibilityRow, EpisodeRow, ShadowRow, ValidationConfigRow, ValidationRow
 from app.domain import Model, Venue, now
 from app.eligibility import AccountAttestation, eligibility_status
+from app.focused import focused_report
 from app.store import Store, audit, upsert
 from app.validation import ValidationSettings, validation_report, validation_settings
 
@@ -23,6 +24,11 @@ class ConfigurationUpdate(Model):
 @router.get("/summary")
 async def report(request: Request) -> dict[str, Any]:
     return await validation_report(request.app.state.store)
+
+
+@router.get("/focused")
+async def focused(request: Request) -> dict[str, Any]:
+    return await focused_report(request.app.state.store)
 
 
 @router.get("/candidates")
@@ -102,6 +108,10 @@ async def set_configuration(
     matches = {match.id for match in await store.matches()}
     if any(identifier not in matches for identifier in body.settings.selected_match_ids):
         raise HTTPException(422, "CURRENT_MATCH_REQUIRED_FOR_WATCHLIST")
+    if len(body.settings.selected_match_ids) > 10 or body.settings.shortlist_size > 10:
+        raise HTTPException(422, "FOCUSED_WATCHLIST_MAXIMUM_TEN")
+    if not body.settings.focus_automatic:
+        body.settings.focus_scope = "operator_selected"
     async with store.sessions.begin() as session:
         row = await session.get(ValidationConfigRow, store.source, with_for_update=True)
         if row is None:

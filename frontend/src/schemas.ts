@@ -33,6 +33,10 @@ export const rulesSchema = z.object({
   cancellation: z.string().nullable(),
   postponement: z.string().nullable(),
   settlement_source: z.string().nullable(),
+  discretionary_settlement: z
+    .enum(["excluded", "independent_fair_price"])
+    .nullable()
+    .optional(),
   payout: decimal,
   evidence: z.record(z.string(), z.string()),
 });
@@ -170,8 +174,40 @@ export function page<T extends z.ZodType>(item: T) {
     offset: z.number(),
   });
 }
+export const costComponentNames = [
+  "funding",
+  "conversion",
+  "withdrawal",
+  "settlement",
+  "rebalancing",
+  "network",
+] as const;
+export const costComponentSchema = z.object({
+  status: z.enum([
+    "verified_amount",
+    "verified_zero",
+    "not_applicable",
+    "unknown",
+  ]),
+  amount: decimal,
+  basis: z.enum(["per_contract", "per_leg"]),
+  applies_to: z.enum(["opening", "unwind", "both"]).default("opening"),
+  execution_path: z.string(),
+  evidence: z.string(),
+  observed_at: timestamp,
+  expires_at: timestamp.nullable(),
+});
+export const additionalCostsSchema = z.object({
+  verified: z.boolean().default(false),
+  settlement_per_contract: decimal.default("0"),
+  rebalancing_per_contract: decimal.default("0"),
+  fixed_per_leg: decimal.default("0"),
+  evidence: z.string().default(""),
+  components: z.record(z.string(), costComponentSchema).default({}),
+});
 export const riskSchema = z
   .object({
+    additional_costs: z.record(z.string(), additionalCostsSchema).default({}),
     max_per_venue: decimal,
     max_total_notional: decimal,
     bankroll: decimal,
@@ -304,6 +340,20 @@ export const eligibilitySchema = z
     reasons: z.array(z.string()),
     probe_error: z.string().nullable(),
     live_execution_available: z.literal(false),
+    key_trading_scope: z
+      .enum(["verified", "restricted", "unverified", "unsupported"])
+      .optional(),
+    key_region_status: z.enum(["unknown", "current", "expired"]).optional(),
+    key_binding_status: z
+      .enum([
+        "primary_account",
+        "bound_subaccount",
+        "institutional_subtrader",
+        "unverified",
+      ])
+      .optional(),
+    key_scope_probe_error: z.string().nullable().optional(),
+    permission_evidence_limitation: z.string().optional(),
   })
   .passthrough();
 export const candidateSchema = z
@@ -342,12 +392,17 @@ export const candidateSchema = z
             direction: side,
             scenario: z.string(),
             combined_payout: decimal.nullable(),
+            minimum_payout: decimal.nullable().optional(),
+            maximum_payout: decimal.nullable().optional(),
+            evidence: z.string().optional(),
             covered: z.boolean(),
           }),
         ),
       })
       .passthrough(),
     fee_evidence: objectSchema,
+    settlement_adjusted_net_profit: decimal.nullable().optional(),
+    known_scenario_net_floor: decimal.nullable().optional(),
     source,
   })
   .passthrough();
@@ -357,6 +412,16 @@ export const validationSettingsSchema = z.object({
   shortlist_size: z.number().int(),
   diagnostic_days: z.number().int(),
   selected_match_ids: z.array(z.string()),
+  legacy_selected_match_ids: z.array(z.string()).default([]),
+  focus_version: z.string().default(""),
+  focus_automatic: z.boolean().default(true),
+  focus_scope: z
+    .enum([
+      "diagnostic_only",
+      "potentially_eligible_review",
+      "operator_selected",
+    ])
+    .default("diagnostic_only"),
   virtual_balance_per_venue: decimal,
   max_shadow_per_leg: decimal,
   max_shadow_daily_trials: z.number().int(),
@@ -366,6 +431,78 @@ export const validationSettingsSchema = z.object({
   daily_operating_cost: decimal,
   operating_cost_verified: z.boolean(),
   operating_cost_evidence: z.string(),
+});
+export const focusedValidationSchema = z.object({
+  families: z.array(
+    z
+      .object({
+        id: z.string(),
+        league: z.string(),
+        second_venue: venue,
+        disposition: z.enum([
+          "restricted",
+          "nonconstant_hedge",
+          "compatible_profile",
+          "incompatible_profile",
+          "unproven",
+        ]),
+        pair_count: z.number(),
+        representative_match_id: z.string().nullable(),
+        review_scope: z.string(),
+        reasons: z.array(z.string()),
+      })
+      .passthrough(),
+  ),
+  family_counts: z.record(z.string(), z.number()),
+  family_review_limit: z.number(),
+  focus_scope: z.string(),
+  focused_pairs: z.array(
+    z.object({
+      match_id: z.string(),
+      event: z.string(),
+      league: z.string(),
+      scope: z.string(),
+      family_id: z.string(),
+      books: z.array(
+        z.object({
+          market_id: z.string(),
+          instrument: z.string(),
+          outcome: side,
+          cause: z.string(),
+          age_ms: z.number().nullable(),
+          asks: z.number().nullable(),
+          bids: z.number().nullable(),
+          monitoring: objectSchema,
+          monitoring_evidence_current: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+  coverage: z.object({
+    tracking_started_at: timestamp.nullable(),
+    pair_seconds: z.record(z.string(), decimal),
+    pair_count: z.number(),
+    distinct_funded_spread_windows: z.number().default(0),
+    verdict: z.string(),
+    method: z.string(),
+    historical_coverage_before_tracking: z.string(),
+    by_pair: z.array(
+      z.object({
+        match_id: z.string(),
+        day: z.string(),
+        seconds: z.record(z.string(), decimal),
+      }),
+    ),
+  }),
+  cost_evidence: z.record(
+    z.string(),
+    z.object({
+      complete: z.boolean(),
+      unknown_components: z.array(z.string()),
+      assumptions: additionalCostsSchema,
+    }),
+  ),
+  screen_conclusion: z.string(),
 });
 export const validationSummarySchema = z.object({
   at: timestamp,
@@ -399,4 +536,5 @@ export const validationSummarySchema = z.object({
   capital_weighted_lockup_usd_seconds: decimal,
   eligibility: z.array(eligibilitySchema),
   limitation: z.string(),
+  focused_validation: focusedValidationSchema,
 });
