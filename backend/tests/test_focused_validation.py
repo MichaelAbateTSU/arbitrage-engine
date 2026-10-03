@@ -21,6 +21,7 @@ from app.domain import (
 from app.eligibility import eligibility_status, refresh_kalshi_scope
 from app.focused import (
     book_diagnostic,
+    choose_focus,
     coverage_frame,
     coverage_tick,
     credit_interval,
@@ -33,6 +34,7 @@ from app.matching import extract_rules, match_markets
 from app.settlement import settlement_proof
 from app.shadow import complete_trial, shadow_tick, unwind_trial
 from app.validation import diagnose, validation_settings, validation_tick
+from app.workers import focused_signature
 
 
 def evidenced_costs(amount="0"):
@@ -463,3 +465,27 @@ def test_family_review_keeps_international_restricted_and_fair_price_unapproved(
     eligibility[b.venue].jurisdiction_status = "close_only"
     values = family_screen([match], {a.id: a, b.id: b}, eligibility)
     assert values[0]["disposition"] == "restricted"
+
+
+def test_existing_valid_focus_does_not_churn_when_new_families_sort_earlier(scenario):
+    a, b, books, match, _ = scenario
+    other = match.model_copy(update={"id": "new-match", "event_id": "new-event"})
+    families = [
+        {
+            "id": "a-new-family",
+            "disposition": "unproven",
+            "restrictions": [],
+            "match_ids": [other.id],
+        },
+        {
+            "id": "z-existing-family",
+            "disposition": "unproven",
+            "restrictions": [],
+            "match_ids": [match.id],
+        },
+    ]
+    selected, _ = choose_focus(families, [other, match], {a.id: a, b.id: b}, books, [match.id], 1)
+    assert selected == [match.id]
+    assert focused_signature([match], Venue.KALSHI) == {match.id}
+    assert focused_signature([match], b.venue) == {match.id}
+    assert focused_signature([match], Venue.INTERNATIONAL) == set()

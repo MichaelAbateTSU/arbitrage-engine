@@ -25,7 +25,7 @@ from app.db import (
     create_database,
 )
 from app.demo import demo_books, demo_markets
-from app.domain import Book, Side, Venue, now
+from app.domain import Book, Match, Side, Venue, now
 from app.eligibility import refresh_account_evidence
 from app.focused import coverage_tick, instrument_mapping_issue, monitor_updates
 from app.pricing import BookIntegrityError
@@ -39,6 +39,14 @@ from app.venues.http import PublicHTTP, VenueError
 from app.venues.streams import international_stream, kalshi_stream, us_stream
 
 log = structlog.get_logger()
+
+
+def focused_signature(matches: list[Match], venue: Venue) -> set[str]:
+    return {
+        match.id
+        for match in matches
+        if venue == Venue.KALSHI or match.second_market_id.startswith(f"{venue}:")
+    }
 
 
 async def guarded_loop(
@@ -184,6 +192,10 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
             if match.id in validation.selected_match_ids
             for identifier in (match.first_market_id, match.second_market_id)
         }
+        focus_signature = focused_signature(
+            await store.matches(validation.selected_match_ids),
+            client.venue,
+        )
         markets.sort(
             key=lambda x: (
                 x.id not in watched,
@@ -283,6 +295,17 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
                         queue.clear()
                         await monitor_updates(store, values)
 
+                async def watch_focus(initial: set[str] = focus_signature) -> None:
+                    while True:
+                        await asyncio.sleep(2)
+                        current, _, _ = await validation_settings(store)
+                        relevant = focused_signature(
+                            await store.matches(current.selected_match_ids),
+                            client.venue,
+                        )
+                        if relevant != initial:
+                            return
+
                 generator = (
                     international_stream(markets, observe)
                     if client.venue == Venue.INTERNATIONAL
@@ -299,18 +322,25 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
                     persistence = asyncio.create_task(
                         persist_stream(store, client, generator, len(markets), reconnects)
                     )
+                    focus_watcher = asyncio.create_task(watch_focus())
                     try:
                         completed, _ = await asyncio.wait(
-                            (writer, persistence), return_when=asyncio.FIRST_COMPLETED
+                            (writer, persistence, focus_watcher),
+                            return_when=asyncio.FIRST_COMPLETED,
                         )
                         for task in completed:
                             await task
                         if writer in completed:
                             raise RuntimeError("MONITORING_WRITER_STOPPED")
+                        if focus_watcher in completed:
+                            await store.health(client.venue, feed="focused_universe_resubscribe")
                     finally:
                         writer.cancel()
                         persistence.cancel()
-                        await asyncio.gather(writer, persistence, return_exceptions=True)
+                        focus_watcher.cancel()
+                        await asyncio.gather(
+                            writer, persistence, focus_watcher, return_exceptions=True
+                        )
                         await monitor_updates(store, events)
             else:
                 for market in markets:

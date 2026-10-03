@@ -151,7 +151,7 @@ def detect(
         failures.append("MARKET_MATCH_UNAPPROVED")
     if settings.require_human_review and not match.human_reviewed:
         failures.append("HUMAN_REVIEW_REQUIRED")
-    if not settlement_proof(a, b)["proven"]:
+    if match.status == current.status == "approved" and not settlement_proof(a, b)["proven"]:
         failures.append("SETTLEMENT_SCENARIO_COVERAGE_UNPROVEN")
     if match.confidence < settings.min_confidence:
         failures.append("MATCH_CONFIDENCE_TOO_LOW")

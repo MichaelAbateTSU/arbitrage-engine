@@ -245,6 +245,12 @@ def choose_focus(
         )
     selected: list[str] = []
     events: set[str] = set()
+    available = {match.id: match for values in groups.values() for match in values}
+    for identifier in previous:
+        retained = available.get(identifier)
+        if retained is not None and retained.event_id not in events and len(selected) < size:
+            selected.append(identifier)
+            events.add(retained.event_id)
     while any(groups.values()) and len(selected) < size:
         for identifier in sorted(groups):
             values = groups[identifier]

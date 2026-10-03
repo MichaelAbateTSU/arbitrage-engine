@@ -508,7 +508,7 @@ This is conservative sampled coverage, not proof of atomic order execution.
 Read-only Render job `job-db0igdfavr4c73fsf2eg` succeeded. At **2026-10-03
 16:07:30 UTC**, the deployment still had 240 pairs: 56 NFL/US, 70 NBA/US,
 56 NFL/international and 58 NBA/international. All 240 lacked approval/cost
-evidence, 213 lacked one or both monitored books, and 27 directions/pairs with
+evidence, 213 lacked one or both monitored books, and 27 pairs with
 priced evidence also showed stale/skewed books and no gross spread. Counts
 overlap and are observations, not promised current totals.
 
@@ -519,6 +519,13 @@ respectively; those responses were not genuinely empty books, and their timestam
 were not refreshed. This does not retroactively prove why every missing
 subscription failed; the new per-instrument records make subsequent causes
 auditable.
+
+Cloud acceptance initially exposed a focused-monitoring handoff defect:
+two newly selected contracts still had cap-exclusion evidence from the preceding
+subscription generation. The fix retains valid current targets and watches
+focused match signatures every two seconds, resubscribing authoritatively after
+selection/specification changes instead of waiting for the five-minute periodic
+snapshot. Neither freshness thresholds nor the original clock were changed.
 
 The NBA US sample uses two calendar days, unlike the NFL sample's two weeks.
 Both still contain independent fair-price fallback and do not establish a

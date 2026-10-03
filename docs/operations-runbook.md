@@ -82,6 +82,11 @@ confirmation/rejection, mapping evidence, generation, reconstruction and timesta
 Public REST probes distinguish endpoint availability from missing/stale stream
 snapshots, but never overwrite sequenced streams or freshen exchange timestamps.
 Subscription status is not inferred from venue-level connected health.
+Valid existing focused targets are retained when unrelated families appear.
+A two-second target-signature watcher detects selection or rule-version changes
+and requests a new authoritative subscription immediately rather than waiting
+five minutes for periodic rediscovery. Reconfiguration invalidates old books;
+it never extends freshness or claims a continuous interval across the restart.
 
 Enter funding/conversion/withdrawal/settlement/rebalancing/network components as
 `verified_amount`, `verified_zero`, `not_applicable` or `unknown`, with amount,
