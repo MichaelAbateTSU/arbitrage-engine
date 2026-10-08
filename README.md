@@ -234,6 +234,34 @@ It defines API, three workers, a same-origin frontend proxy and private PostgreS
 Automatic deployment waits for checks; previews and live execution are off.
 See [deployment instructions](docs/deployment-render.md).
 
+## US-500 perpetual research
+
+Kalshi's `KXUS500PERP` is a **linear perpetual future on the MerQube US Large Cap
+price-return index**, not a complementary $1 binary contract. It is excluded
+from binary pricing and the continuous workers. The separate diagnostic is
+read-only and does not enable margin trading, submit orders or change accounts:
+
+```powershell
+$env:PYTHONPATH = "$PWD\backend"
+.\.venv\Scripts\python.exe scripts\us500_probe.py --samples 3 --quantity 1000 --output "$env:TEMP\us500-research.json"
+# Optional: read existing Kalshi credentials only for GET enabled/fee evidence.
+.\.venv\Scripts\python.exe scripts\us500_probe.py --account-evidence --output "$env:TEMP\us500-account-research.json"
+```
+
+Quantity is **API contracts**, not full index-point contracts. Current contract
+size, tick size and fractional-trading permission come from the perps API, not
+the filing's proposed defaults. The probe walks direct bids/asks, preserves
+request/receipt timestamps and marks the missing REST provider timestamp.
+Applied historical funding is gross evidence, not future profit or an
+annualized yield. Unknown fees and hedge/financing costs keep net profit null.
+
+Funding carry may earn income with an executable, properly financed hedge;
+SPY/ES are not proven replicas of this index. Funding reversals, exit basis,
+dividends, borrowing and venue-local liquidation can defeat the trade. Synthetic
+stress cases are separately labeled and never qualify as live arbitrage.
+The October 8 account check returned **margin enabled = false**. No account
+setting was changed. See report section 30 for primary sources and live results.
+
 ## Honest limitations
 
 - Raw public rules often omit required policies or reliable game start. Such

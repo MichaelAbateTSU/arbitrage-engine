@@ -1,10 +1,19 @@
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import ROUND_CEILING, ROUND_HALF_EVEN, Decimal
-from typing import Literal, TypedDict, Unpack
+from typing import Literal, Protocol, TypedDict, Unpack
 
 from app.domain import Book, D, FeeSpec, Level, Market, Side
 
 ONE = D("1")
+
+
+class PricedQuantity(Protocol):
+    @property
+    def price(self) -> Decimal: ...
+
+    @property
+    def quantity(self) -> Decimal: ...
 
 
 class BookMetadata(TypedDict, total=False):
@@ -49,27 +58,39 @@ def complementary_book(
 def consume(
     levels: list[Level], quantity: Decimal, limit: Decimal = ONE, haircut: Decimal = ONE
 ) -> list[Level]:
+    return [
+        Level(price=price, quantity=size)
+        for price, size in depth_slices(levels, quantity, limit, haircut)
+    ]
+
+
+def depth_slices(
+    levels: Sequence[PricedQuantity],
+    quantity: Decimal,
+    limit: Decimal | None = None,
+    haircut: Decimal = ONE,
+) -> list[tuple[Decimal, Decimal]]:
     if quantity <= 0 or not quantity.is_finite():
         raise ValueError("INVALID_QUANTITY")
     remaining = quantity
-    result: list[Level] = []
+    result: list[tuple[Decimal, Decimal]] = []
     for level in levels:
-        if level.price > limit:
+        if limit is not None and level.price > limit:
             break
         take = min(remaining, level.quantity * haircut)
         if take > 0:
-            result.append(Level(price=level.price, quantity=take))
+            result.append((level.price, take))
             remaining -= take
         if remaining == 0:
             break
     return result
 
 
-def cost(levels: list[Level]) -> Decimal:
+def cost(levels: Sequence[PricedQuantity]) -> Decimal:
     return sum((x.price * x.quantity for x in levels), D("0"))
 
 
-def quantity(levels: list[Level]) -> Decimal:
+def quantity(levels: Sequence[PricedQuantity]) -> Decimal:
     return sum((x.quantity for x in levels), D("0"))
 
 

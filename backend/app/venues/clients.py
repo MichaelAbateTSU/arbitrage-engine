@@ -136,6 +136,11 @@ class KalshiClient:
             yield market
 
     async def get_orderbooks(self, market: Market) -> list[Book]:
+        if (
+            market.market_type not in ("moneyline", "btc_up_down_15m")
+            or market.external_id == "KXUS500PERP"
+        ):
+            raise VenueError("KALSHI_NON_BINARY_PRODUCT_UNSUPPORTED")
         if market.bitcoin and now() >= market.bitcoin.window_end:
             raise VenueError("BTC_WINDOW_EXPIRED")
         current = await self.http.get(f"{self.base}/markets/{quote(market.external_id, safe='')}")

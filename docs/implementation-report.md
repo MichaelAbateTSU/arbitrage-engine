@@ -1301,3 +1301,135 @@ and this model/recovery work. Live trading remains unavailable. Restoring Render
 availability requires resuming the existing database with billing approval and
 then verifying migrations, readiness, actual-source worker leases and current
 feeds; a pushed commit or `live` service label alone is not a restored deployment.
+
+## 30. US-500: a separate perpetual-futures feasibility investigation
+
+### Verified product, not a binary hedge
+
+The [August 18 CFTC submission](https://www.cftc.gov/filings/ptc/ptc08182617972.pdf)
+identifies US500 as a perpetual future on the **MerQube US Large Cap price-return
+index (MQ5C)**, without fixed expiry or delivery. Its reference excludes dividends.
+Appendix A describes daily funding at the regular equity-market close, or early
+close, only on index business days; no premium is measured while the index is
+not calculating or its feed is unavailable. Positive funding transfers value
+from longs to shorts; negative funding reverses the payment. The filing also
+permits discretionary settlement/margin decisions and prospective methodology
+changes. Funding is not a guaranteed interest payment.
+
+The downloaded 32-page filing has SHA256
+`81d77bf2996bada00a37dedd2748e37641fb0c2c5fa11c16bec6a17fa9934be6`.
+It is a submission, **not proof of the currently effective account/market terms**.
+The old predictions-series response has fee type
+`margin_market_maker_program_fees` and multiplier zero, with an unusable `.pdf`
+terms link. That zero is not a verified zero trading fee.
+
+Primary API references:
+
+- [Perps connectivity and rollout](https://docs.kalshi.com/margin.md):
+  production REST uses `external-api.kalshi.com/trade-api/v2/margin`;
+  account enablement is separate and rollout is member-specific.
+- [Market metadata](https://docs.kalshi.com/margin-rest/market/get-market.md)
+  and [direct bid/ask depth](https://docs.kalshi.com/margin-rest/market/get-market-orderbook.md).
+- [Provisional funding estimate](https://docs.kalshi.com/margin-rest/funding/get-funding-rate-estimate.md)
+  and [applied funding history](https://docs.kalshi.com/margin-rest/funding/get-historical-funding-rates.md).
+- [Account enablement](https://docs.kalshi.com/margin-rest/exchange/get-enabled-status.md),
+  [account-specific notional fee rates](https://docs.kalshi.com/margin-rest/fees/get-fee-tiers.md),
+  and [system margin parameters](https://docs.kalshi.com/margin-rest/risk/get-risk-parameters.md).
+
+The generic funding-estimate documentation describes a per-second time-weighted
+calculation; the filing describes equally weighted per-minute trade premiums.
+No equivalence or current methodology approval was invented. The diagnostic
+uses provider-reported applied payments and identifies future estimates as
+provisional; it does not reconstruct a supposedly authoritative funding rate.
+
+### Bounded live observations and actual account blocker
+
+Public GETs successfully returned market metadata, direct depth, funding and
+system risk parameters. At October 8, 05:48 UTC, metadata identified
+`KXUS500PERP`, API contract size **0.001000**, underlying multiplier **1**,
+dollar tick **0.0001**, and **fractional trading disabled**. Thus an entry of
+1,000 API contracts represented one full underlying index-contract unit; the
+entry grid was whole API contracts. The filing's proposed full-contract tick and
+minimum fraction were not substituted for this active metadata.
+
+A separately signed **GET-only** account check at 05:50 UTC returned HTTP 200
+with **enabled = false**. The account fee endpoint was not queried while disabled.
+No margin enablement, transfer, position, order, preview or account mutation
+endpoint was called. No private account identifiers or credentials were exported.
+
+Three subsequent live samples at **05:56:20-05:56:26 UTC** completed without
+provider errors. At 1,000 API contracts, depth-adjusted purchase cost was
+**$13,717.8088**; immediate sale proceeds were **$13,716.5810** in the first two
+samples and **$13,716.5450** in the third. Same-snapshot round trips therefore
+lost **$1.2278-$1.2638 before fees**, not an arbitrage.
+
+Applied funding history reported:
+
+| Applied time (UTC) | Rate per funding event | Gross short payment per $10,000 event notional |
+| --- | --- | --- |
+| October 6, 20:00 | 0.0003212319441842 | $3.212319441842 |
+| October 7, 20:00 | 0.0010869999556274 | $10.869999556274 |
+
+These are **two historical gross observations**, not realized portfolio returns,
+an annual yield or a forecast. At a fixed 1,000 API-contract quantity, the
+respective gross credits would have been approximately **$4.4252 and $14.9202**
+using each event's reported mark. No historical hedge entry, funding costs,
+inventory ownership or successful fill was fabricated.
+
+The next funding estimate was **zero and provisional**, scheduled for October 8
+at 20:00 UTC. The cached index reference timestamp was October 7, 20:20 UTC:
+an overnight reference is not a fresh tradable hedge quote, and does not by
+itself establish a stalled feed. The REST book contained no provider timestamp;
+the diagnostic preserved actual request/receipt times rather than refreshing a
+fictional exchange timestamp. Live REST ladder ordering contradicted the
+documentation, so the adapter canonicalizes ordering and rejects duplicate,
+crossed, malformed, negative and off-grid depth.
+
+### What could earn money, and what remains unproven
+
+**Funding carry is a risk-bearing candidate**, not this engine's binary
+arbitrage. A short perpetual with an independently executable long hedge could
+receive positive funding. The inverse may receive negative funding, but a short
+hedge incurs borrowing, dividend obligations and recall risk. MerQube's index is
+not automatically identical to SPY, SPX or ES. An exact basket requires
+constituent/weight evidence, reliable replication, rebalancing, financing,
+dividend treatment and executable broker access.
+
+Net economics must include both perpetual fills/fees, hedge entry/exit,
+financing, borrow costs, signed dividends, execution failures and residual exit
+basis. No expiry forces the perpetual to converge at a chosen exit time.
+Current positive funding can reverse, become zero or be changed under governing
+rules. Gains at a separate hedge venue cannot automatically meet a Kalshi
+margin call; a nominally neutral portfolio can still be liquidated.
+
+The separate typed Decimal model calculates conditional price/funding/hedge
+cashflows, conservative per-leg fee estimates, a break-even funding cashflow,
+and venue-local equity both **before and after funding**. A later funding credit
+cannot rescue a position that already breached its maintenance requirement.
+Unknown essential costs leave net profit null; no scenario qualifies as
+arbitrage or authorizes an order.
+
+Five explicitly **synthetic** stress cases seed their price from the observed
+mark but assume their own fees, hedge costs, collateral and funding. They cover
+favorable funding, reversal, zero funding, hedge failure/basis widening and
+liquidation despite offsetting hedge gains. A favorable synthetic result is not
+live profitability. Tests also exercise exact numeric JSON parsing, quote/quantity
+scaling, direct-book depth, stale/future timestamps, duplicate history, disabled
+accounts, missing fees and exclusion from complementary binary adapters.
+
+**Decision:** continue read-only research, not execution. The account is not
+perps-enabled, no exact executable hedge is verified, current governing terms
+are unbound, and complete account-specific costs/margin survival remain unknown.
+The bounded `scripts/us500_probe.py` diagnostic makes those blockers reproducible.
+It is deliberately not wired into the binary workers or enabled as a new live
+strategy. No profit claim, leverage permission, billing resumption, cloud
+restoration or scheduled support prompt was inferred from this investigation.
+
+### Verification
+
+The backend passed **235 tests**: 230 in the full ordinary suite and all five
+PostgreSQL cases against a dedicated, migrated PostgreSQL 17 database.
+Alembic's model check found no missing migrations. Ruff formatting/lint and
+strict application mypy passed. The unchanged frontend passed 15 tests, types,
+formatting, lint and its production build. The three real-data samples above
+were read-only; the test database was removed afterward.

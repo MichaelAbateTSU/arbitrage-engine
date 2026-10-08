@@ -67,6 +67,12 @@ def kalshi_market(
 ) -> Market:
     if league == "BTC":
         return kalshi_bitcoin(wire, series, fee_rate)
+    if (
+        wire.market_type != "binary"
+        or wire.ticker == "KXUS500PERP"
+        or series.get("fee_type") == "margin_market_maker_program_fees"
+    ):
+        raise VenueError("KALSHI_NON_BINARY_PRODUCT_UNSUPPORTED")
     raw = wire.model_dump(mode="json")
     rules_text = f"{wire.rules_primary}\n{wire.rules_secondary}".strip()
     game = re.search(
