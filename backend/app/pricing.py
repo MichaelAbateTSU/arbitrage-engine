@@ -94,7 +94,7 @@ def fee(levels: list[Level], spec: FeeSpec) -> Decimal:
 
 
 def book_reasons(book: Book, market: Market, instant: datetime, max_age: int) -> list[str]:
-    reasons: list[str] = []
+    reasons: list[str] = market.entry_reasons(instant)
     if not book.synchronized:
         reasons.append("BOOK_UNSYNCHRONIZED")
     if not book.connected:

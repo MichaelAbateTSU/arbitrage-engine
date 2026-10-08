@@ -12,6 +12,7 @@ from app.domain import (
     Opportunity,
     RiskSettings,
     Side,
+    SizingAnalysis,
     fingerprint,
 )
 from app.matching import match_markets
@@ -24,8 +25,8 @@ def calculate(
 ) -> Calculation | None:
     if not first.asks or not second.asks:
         return None
-    step = max(a.quantity_step, b.quantity_step)
-    if step % a.quantity_step or step % b.quantity_step:
+    step = max(a.quantity_step, b.quantity_step, settings.entry_quantity_step)
+    if step % a.quantity_step or step % b.quantity_step or step % settings.entry_quantity_step:
         raise ValueError("QUANTITY_ROUNDING_MISMATCH")
     available = min(quantity(first.asks), quantity(second.asks), D(settings.max_contracts))
     if settings.sizing_mode == "fixed_quantity":
@@ -37,8 +38,13 @@ def calculate(
     minimum = max(a.minimum_quantity, b.minimum_quantity, step)
     start = int((minimum / step).to_integral_value(rounding="ROUND_CEILING"))
     end = int((available / step).to_integral_value(rounding=ROUND_FLOOR))
+    if end - start + 1 > 10000:
+        raise ValueError("SIZING_GRID_TOO_LARGE")
     best: Calculation | None = None
+    best_net: Calculation | None = None
     fallback: Calculation | None = None
+    evaluated, qualifying = 0, 0
+    target_stopped = False
     for units in range(start, end + 1):
         q = step * units
         one, two = consume(first.asks, q), consume(second.asks, q)
@@ -81,19 +87,49 @@ def calculate(
             consumed_two=two,
         )
         fallback = result
+        evaluated += 1
+        if best_net is None or profit > best_net.net_profit:
+            best_net = result
         if profit >= settings.min_profit and result.net_return >= settings.min_edge and profit > 0:
-            best = result
+            qualifying += 1
+            if best is None or settings.sizing_mode == "max_depth" or profit > best.net_profit:
+                best = result
             if settings.sizing_mode == "target_profit" and profit >= settings.target_profit:
                 result.binding_constraint = "TARGET_PROFIT"
-                return result
-    if best:
+                best = result
+                target_stopped = True
+                break
+    selected = best or (fallback if settings.sizing_mode == "max_depth" else best_net)
+    if selected is None or best_net is None or fallback is None:
+        return None
+    selected.sizing_analysis = SizingAnalysis(
+        objective=(
+            "largest_qualified"
+            if settings.sizing_mode == "max_depth"
+            else "target_profit"
+            if settings.sizing_mode == "target_profit"
+            else "max_net_profit"
+        ),
+        evaluated_sizes=evaluated,
+        qualifying_sizes=qualifying,
+        best_net_quantity=best_net.quantity,
+        best_net_profit=best_net.net_profit,
+        largest_evaluated_quantity=fallback.quantity,
+        largest_size_net_profit=fallback.net_profit,
+        target_stopped_search=target_stopped,
+    )
+    if best and not target_stopped:
         if best.quantity == settings.max_contracts:
             best.binding_constraint = "MAX_CONTRACTS"
         elif best.quantity < available:
-            best.binding_constraint = "CAPITAL_OR_NET_EDGE"
+            best.binding_constraint = (
+                "NET_PROFIT_OPTIMUM"
+                if best.quantity < fallback.quantity and settings.sizing_mode != "max_depth"
+                else "CAPITAL_OR_NET_EDGE"
+            )
         else:
             best.binding_constraint = "AVAILABLE_DEPTH"
-    return best or fallback
+    return selected
 
 
 def exposure_reasons(settings: RiskSettings, exposure: Exposure, capital: Decimal) -> list[str]:
@@ -139,6 +175,8 @@ def detect(
     exposure: Exposure | None = None,
 ) -> tuple[list[Opportunity], list[str]]:
     failures: list[str] = []
+    failures += a.entry_reasons(instant, settings.latency_ms)
+    failures += b.entry_reasons(instant, settings.latency_ms)
     if a.quote_currency != b.quote_currency and not settings.allow_usdc_parity_assumption:
         failures.append("CURRENCY_ASSUMPTION_UNACKNOWLEDGED")
     current = match_markets(a, b, match.human_reviewed)
@@ -194,7 +232,13 @@ def detect(
             continue
         if settings.kill_switch:
             reasons.append("KILL_SWITCH_ACTIVE")
-        result = calculate(first, second, a, b, settings)
+        try:
+            result = calculate(first, second, a, b, settings)
+        except ValueError as exc:
+            if str(exc) not in ("SIZING_GRID_TOO_LARGE", "QUANTITY_ROUNDING_MISMATCH"):
+                raise
+            failures.append(str(exc))
+            continue
         if result is None:
             failures.append("INSUFFICIENT_DEPTH")
             continue
@@ -224,12 +268,22 @@ def detect(
             "match": match.model_dump(mode="json"),
             "risk": settings.model_dump(mode="json"),
         }
+        expires_at = min(
+            first.received_at,
+            second.received_at,
+            first.requested_at or first.received_at,
+            second.requested_at or second.received_at,
+            first.exchange_at or first.received_at,
+            second.exchange_at or second.received_at,
+        ) + timedelta(milliseconds=settings.max_quote_age_ms)
+        if a.bitcoin and b.bitcoin:
+            expires_at = min(expires_at, a.bitcoin.window_end, b.bitcoin.window_end)
         opportunities.append(
             Opportunity(
                 id=fingerprint([match.id, side, first.model_dump(), second.model_dump()])[:32],
                 match_id=match.id,
                 event_id=match.event_id,
-                event=" vs ".join(a.participants),
+                event=a.event_label,
                 sport=a.sport,
                 league=a.league,
                 first_market_id=a.id,
@@ -238,15 +292,7 @@ def detect(
                 second_outcome=other,
                 second_venue=b.venue,
                 detected_at=instant,
-                expires_at=min(
-                    first.received_at,
-                    second.received_at,
-                    first.requested_at or first.received_at,
-                    second.requested_at or second.received_at,
-                    first.exchange_at or first.received_at,
-                    second.exchange_at or second.received_at,
-                )
-                + timedelta(milliseconds=settings.max_quote_age_ms),
+                expires_at=expires_at,
                 calculation=result,
                 confidence=match.confidence,
                 quote_age_ms=max(first.age_ms(instant), second.age_ms(instant)),

@@ -1,6 +1,7 @@
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -127,9 +128,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             from redis.exceptions import RedisError
 
             try:
-                result["redis"] = (
-                    "healthy" if await redis.execute_command("PING") else "unavailable"
-                )
+                ping = redis.ping()
+                if not isawaitable(ping):
+                    log.error("dependency_failed", error_code="ASYNC_REDIS_CLIENT_REQUIRED")
+                    raise RuntimeError("ASYNC_REDIS_CLIENT_REQUIRED")
+                result["redis"] = "healthy" if await ping else "unavailable"
             except RedisError:
                 result["redis"] = "unavailable"
             result["ready"] = result["ready"] and result["redis"] == "healthy"

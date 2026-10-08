@@ -18,6 +18,7 @@ from app.venues.http import VenueError, decode
 from app.venues.schemas import USBook
 
 StreamObserver = Callable[[list[str], str], None]
+KALSHI_BOOK_PUBLISH_INTERVAL_SECONDS = 0.1
 
 
 def kalshi_headers(settings: Settings, path: str = "/trade-api/ws/v2") -> dict[str, str]:
@@ -72,8 +73,13 @@ class KalshiStreamState:
         self.markets = {x.external_id: x for x in markets}
         self.sequences: dict[int, int] = {}
         self.levels: dict[str, dict[str, dict[D, D]]] = {}
+        self.latest: dict[str, tuple[int, datetime | None, datetime]] = {}
+        self.pending: set[str] = set()
 
-    def apply(self, data: dict[str, Any]) -> list[Book]:
+    def apply(
+        self, data: dict[str, Any], received_at: datetime | None = None, publish: bool = True
+    ) -> list[Book]:
+        received_at = received_at or now()
         kind = data["type"]
         if kind == "error":
             raise VenueError("KALSHI_SUBSCRIPTION_ERROR")
@@ -99,6 +105,7 @@ class KalshiStreamState:
             # including activation, rescheduling and changed price grids.
             market.tradable = False
             market.status = "paused"
+            self.pending.discard(ticker)
             return list(
                 complementary_book(
                     market.id,
@@ -106,17 +113,25 @@ class KalshiStreamState:
                     [],
                     connected=False,
                     synchronized=False,
-                    received_at=now(),
+                    received_at=received_at,
                     transport="websocket",
                     source=market.source,
                 )
             )
         market = self.markets[ticker]
         if kind == "orderbook_snapshot":
-            self.levels[ticker] = {
-                side: {D(p): D(q) for p, q in msg.get(f"{side}_dollars_fp", []) if D(q) > 0}
-                for side in ("yes", "no")
-            }
+            self.levels[ticker] = {}
+            for side in ("yes", "no"):
+                levels = []
+                for p, q in msg.get(f"{side}_dollars_fp", []):
+                    size = D(q)
+                    if size < 0:
+                        raise BookIntegrityError("NEGATIVE_BOOK_QUANTITY")
+                    if size:
+                        levels.append(Level(price=D(p), quantity=size))
+                self.levels[ticker][side] = {
+                    level.price: level.quantity for level in levels if level.quantity > 0
+                }
         else:
             if ticker not in self.levels:
                 raise BookIntegrityError("SNAPSHOT_REQUIRED")
@@ -129,13 +144,24 @@ class KalshiStreamState:
             if size < 0:
                 raise BookIntegrityError("NEGATIVE_BOOK_QUANTITY")
             if size:
+                Level(price=price, quantity=size)
                 ladder[price] = size
             else:
                 ladder.pop(price, None)
-        ladders = self.levels[ticker]
         exchange_at = None
         if data.get("sending_ts_ms") is not None:
             exchange_at = datetime.fromtimestamp(int(data["sending_ts_ms"]) / 1000, UTC)
+        self.latest[ticker] = (seq, exchange_at, received_at)
+        if not publish:
+            self.pending.add(ticker)
+            return []
+        self.pending.discard(ticker)
+        return self.books(ticker)
+
+    def books(self, ticker: str) -> list[Book]:
+        market = self.markets[ticker]
+        ladders = self.levels[ticker]
+        seq, exchange_at, received_at = self.latest[ticker]
         return list(
             complementary_book(
                 market.id,
@@ -143,13 +169,18 @@ class KalshiStreamState:
                 [Level(price=p, quantity=q) for p, q in ladders["no"].items()],
                 sequence=seq,
                 exchange_at=exchange_at,
-                received_at=now(),
+                received_at=received_at,
                 transport="websocket",
                 source=market.source,
                 connected=market.tradable,
                 synchronized=market.tradable,
             )
         )
+
+    def flush(self) -> list[Book]:
+        books = [book for ticker in sorted(self.pending) for book in self.books(ticker)]
+        self.pending.clear()
+        return books
 
 
 async def kalshi_stream(
@@ -194,18 +225,41 @@ async def kalshi_stream(
                 }
             )
         )
+        loop = asyncio.get_running_loop()
+        last_flush, idle_deadline = loop.time(), loop.time() + 30
+        # Validate every delta; coalesce publication without refreshing receipt timestamps.
         while True:
-            raw = await asyncio.wait_for(socket.recv(), timeout=30)
-            data = decode(str(raw))
-            if observer and data.get("type") == "error":
-                observer([market.id for market in markets], "subscription_rejected")
-            if (
-                observer
-                and data.get("type") == "subscribed"
-                and data.get("msg", {}).get("channel") == "orderbook_delta"
-            ):
-                observer([market.id for market in markets], "subscription_confirmed")
-            books = state.apply(data)
+            timeout = idle_deadline - loop.time()
+            if state.pending:
+                timeout = min(
+                    timeout, last_flush + KALSHI_BOOK_PUBLISH_INTERVAL_SECONDS - loop.time()
+                )
+            try:
+                raw = await asyncio.wait_for(socket.recv(), timeout=max(0.001, timeout))
+            except TimeoutError:
+                if loop.time() >= idle_deadline:
+                    raise
+                books = await asyncio.to_thread(state.flush)
+                last_flush = loop.time()
+            else:
+                received_at = now()
+                idle_deadline = loop.time() + 30
+                data = decode(str(raw))
+                if observer and data.get("type") == "error":
+                    observer([market.id for market in markets], "subscription_rejected")
+                if (
+                    observer
+                    and data.get("type") == "subscribed"
+                    and data.get("msg", {}).get("channel") == "orderbook_delta"
+                ):
+                    observer([market.id for market in markets], "subscription_confirmed")
+                books = await asyncio.to_thread(state.apply, data, received_at, False)
+                if state.pending and (
+                    data.get("type") == "orderbook_snapshot"
+                    or loop.time() >= last_flush + KALSHI_BOOK_PUBLISH_INTERVAL_SECONDS
+                ):
+                    books += await asyncio.to_thread(state.flush)
+                    last_flush = loop.time()
             if books:
                 if observer:
                     observer(

@@ -42,6 +42,25 @@ Use Render service logs for structured error codes, build status and worker role
 heartbeats. Authentication-required WebSocket messages call for valid data keys,
 not enabling trading. Missing start/rule fields belong in operator review.
 
+If all roles fail together with database hostname resolution errors, check the
+shared PostgreSQL instance's suspension status before changing credentials or
+code. A manually suspended database needs owner approval to resume its normal
+paid-plan billing. Do not replace it, open its firewall, upgrade its plan or
+reset stored evidence as a workaround. Resume the existing instance only with
+approval, then wait for database availability, rerun the API migration/deploy,
+and verify all three role leases plus `/health/ready`. A Render worker deployment
+marked `live` is not proof of a healthy application heartbeat.
+
+Workers retry transient DNS/connection failures during initialization, log only
+the error class and fail explicitly after the bounded startup window. They do
+not acquire healthy role leases until database/schema initialization succeeds.
+Failed startup disposes the connection pool.
+
+`RENDER_GIT_COMMIT` takes precedence over a manually set `BUILD_VERSION`; source
+provenance and worker heartbeat checks therefore follow the actual deployed
+commit. `BUILD_VERSION` remains a fallback for non-Render deployments. All
+services must reach the same new source version before rollout is accepted.
+
 Before a rollback activate the paper kill switch. Restore a known image/commit
 through Render, assess migration compatibility, and inspect persisted submitted
 intents rather than deleting or resubmitting them. Do not run destructive downgrade

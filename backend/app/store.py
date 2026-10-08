@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -107,6 +107,8 @@ class Store:
                 .on_conflict_do_nothing(index_elements=["id"])
             )
             risk = RiskSettings(kill_switch=self.settings.global_kill_switch)
+            if self.settings.btc_15m_enabled:
+                risk.supported_leagues.append("BTC")
             from app.validation import ValidationSettings
 
             await session.execute(
@@ -204,6 +206,18 @@ class Store:
             rows = (await session.scalars(query)).all()
             return [Market.model_validate(row.payload) for row in rows]
 
+    async def bitcoin_markets(self, venue: str | None = None) -> list[Market]:
+        async with self.sessions() as session:
+            query = select(MarketRow).where(
+                MarketRow.source == self.source,
+                MarketRow.league == "BTC",
+                MarketRow.status == "open",
+            )
+            if venue is not None:
+                query = query.where(MarketRow.venue == venue)
+            rows = (await session.scalars(query)).all()
+            return [Market.model_validate(row.payload) for row in rows]
+
     async def save_match(self, match: Match, market: Market) -> None:
         async with self.sessions.begin() as session:
             await upsert(
@@ -285,12 +299,29 @@ class Store:
                     )
                 )
             statement = insert(CurrentBookRow).values(current_rows)
+            stored_at = CurrentBookRow.payload["received_at"].as_string()
+            incoming_at = statement.excluded.payload["received_at"].as_string()
+            stored_second = func.substr(stored_at, 1, 19)
+            incoming_second = func.substr(incoming_at, 1, 19)
+            # UTC ISO timestamps may omit a zero fractional part; whole-string order is wrong.
+            stored_fraction = case(
+                (func.substr(stored_at, 20, 1) == ".", func.substr(stored_at, 21, 6)),
+                else_="000000",
+            )
+            incoming_fraction = case(
+                (func.substr(incoming_at, 20, 1) == ".", func.substr(incoming_at, 21, 6)),
+                else_="000000",
+            )
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=["id"],
                     set_={"payload": statement.excluded.payload, "updated_at": now()},
-                    where=CurrentBookRow.payload["received_at"].as_string()
-                    <= statement.excluded.payload["received_at"].as_string(),
+                    where=or_(
+                        stored_second < incoming_second,
+                        and_(
+                            stored_second == incoming_second, stored_fraction <= incoming_fraction
+                        ),
+                    ),
                 )
             )
             await session.execute(

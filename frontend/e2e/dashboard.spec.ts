@@ -60,6 +60,17 @@ test("demo dashboard, guarded paper lifecycle and validation phase", async ({
   }
   await expect(page.getByText(/No clock was restarted/)).toBeVisible();
   await page
+    .getByRole("button", { name: /Kalshi YES.*polymarket_us NO/ })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Size and cost hurdle", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Price thresholds do not establish settlement coverage/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close detail", exact: true }).click();
+  await page
     .getByText("kalshi: review all six components", { exact: true })
     .click();
   await expect(page.getByLabel("kalshi funding status")).toHaveValue("unknown");

@@ -2,7 +2,7 @@ import asyncio
 from datetime import timedelta
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.arbitrage import detect, exposure_reasons
 from app.db import CurrentBookRow, MatchRow, OpportunityRow, PaperTradeRow, RiskRow
@@ -26,11 +26,35 @@ from app.telemetry import DECISIONS
 
 async def rematch_all(store: Store) -> int:
     markets = await store.markets()
+    expired_btc = {m.id for m in markets if m.bitcoin is not None and now() >= m.bitcoin.window_end}
+    if expired_btc:
+        async with store.sessions.begin() as session:
+            await session.execute(
+                update(MatchRow)
+                .where(
+                    MatchRow.source == store.source,
+                    (
+                        MatchRow.first_market_id.in_(expired_btc)
+                        | MatchRow.second_market_id.in_(expired_btc)
+                    ),
+                )
+                .values(current=False)
+            )
     first = [x for x in markets if x.venue == "kalshi"]
     second = [x for x in markets if x.venue != "kalshi"]
     count = 0
     for a in first:
         for b in second:
+            if a.id in expired_btc or b.id in expired_btc:
+                continue
+            if a.bitcoin is not None or b.bitcoin is not None:
+                if a.bitcoin is None or b.bitcoin is None:
+                    continue
+                if (
+                    a.bitcoin.window_start != b.bitcoin.window_start
+                    or a.bitcoin.window_end != b.bitcoin.window_end
+                ):
+                    continue
             if a.league != b.league:
                 continue
             if not a.participants or not b.participants:

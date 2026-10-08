@@ -17,6 +17,8 @@ import {
 } from "./components";
 import {
   candidateSchema,
+  executionEconomicsSchema,
+  sizingAnalysisSchema,
   eligibilitySchema,
   objectSchema,
   page,
@@ -110,6 +112,22 @@ export function Validation({
       cell: ({ row }) => (
         <span>{money(row.original.calculation?.net_profit)}</span>
       ),
+    },
+    {
+      id: "cost-hurdle",
+      header: "Gross profit needed / shortfall",
+      cell: ({ row }) =>
+        row.original.execution_economics ? (
+          <span>
+            {money(row.original.execution_economics.required_gross_profit)}
+            <small>
+              Shortfall:{" "}
+              {money(row.original.execution_economics.gross_profit_shortfall)}
+            </small>
+          </span>
+        ) : (
+          "unknown"
+        ),
     },
     {
       id: "reason",
@@ -212,6 +230,10 @@ export function Validation({
           <Reasons reasons={selected.reasons} />
           <h3>Separate account/execution blockers</h3>
           <Reasons reasons={selected.execution_reasons} />
+          <ProfitabilityEvidence
+            sizing={selected.calculation?.sizing_analysis}
+            economics={selected.execution_economics}
+          />
           <button
             className="primary"
             onClick={() => onReview(selected.match_id)}
@@ -333,6 +355,54 @@ export function Validation({
         </>
       )}
     </>
+  );
+}
+
+export function ProfitabilityEvidence({
+  sizing,
+  economics,
+}: {
+  sizing?: z.infer<typeof sizingAnalysisSchema> | null;
+  economics?: z.infer<typeof executionEconomicsSchema> | null;
+}) {
+  if (!sizing && !economics)
+    return <p>Profitability sizing evidence unavailable.</p>;
+  return (
+    <section className="evidence">
+      <h3>Size and cost hurdle</h3>
+      {sizing && (
+        <p>
+          Objective: {reason(sizing.objective)}. Evaluated{" "}
+          {sizing.evaluated_sizes} sizes; {sizing.qualifying_sizes} passed the
+          price thresholds. Best modeled size: {sizing.best_net_quantity}{" "}
+          contracts, net {money(sizing.best_net_profit)}. Largest evaluated
+          size: {sizing.largest_evaluated_quantity} contracts, net{" "}
+          {money(sizing.largest_size_net_profit)}.
+          {sizing.target_stopped_search &&
+            " Search stopped at the requested profit target."}
+        </p>
+      )}
+      {economics && (
+        <>
+          <p>
+            Fees, buffers and modeled additional costs:{" "}
+            {money(economics.cost_hurdle)}. Required gross profit:{" "}
+            {money(economics.required_gross_profit)}. Gross profit shortfall:{" "}
+            {money(economics.gross_profit_shortfall)}.
+          </p>
+          {!economics.cost_evidence_complete && (
+            <p>
+              Additional costs remain unverified; this hurdle is incomplete.
+            </p>
+          )}
+          <p>{economics.basis}</p>
+        </>
+      )}
+      <p>
+        Price thresholds do not establish settlement coverage or account
+        permission.
+      </p>
+    </section>
   );
 }
 

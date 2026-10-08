@@ -1,6 +1,6 @@
 # Arbitrage Intelligence
 
-An auditable sports prediction-market scanner and **paper-execution research
+An auditable sports and opt-in Bitcoin prediction-market scanner and **paper-execution research
 platform** for Kalshi, Polymarket US, and Polymarket International.
 
 **No real-money trading is implemented or enabled.** Live configuration is refused
@@ -19,6 +19,9 @@ paper results are not guaranteed profit, actual earnings, or legal eligibility.
 - Decimal depth walking in both complementary directions, dynamic price grids,
   market-specific fees, conservative rounding, fee-inclusive $500-per-venue caps,
   six sizing modes and reproducible inputs.
+- Profit-maximizing size selection under existing caps and thresholds, with an
+  audited size comparison and current-price fee/cost hurdle. Explicit max-depth
+  and target-profit modes retain their volume/target objectives.
 - Persisted, idempotent, latency-delayed paper intents; partial and one-sided
   fills; conservative liquidity haircut; separate locked and settlement results.
 - Eight responsive dark dashboard pages, authenticated operator controls, secure
@@ -28,6 +31,10 @@ paper results are not guaranteed profit, actual earnings, or legal eligibility.
 - Opportunity validation: every pair's two-direction blockers, independent
   settlement review, exact account-read versus order-permission status,
   additional-cost evidence, distinct episodes and delayed shadow failure trials.
+- Bitcoin 15-minute Kalshi/Polymarket US discovery, exact measurement-window
+  and opening-reference matching, explicit benchmark/exception evidence,
+  expiry-aware paper fills and bounded public diagnostics. Public BTC contracts
+  remain unapproved until the settlement and account/cost gates are satisfied.
 
 ```mermaid
 flowchart LR
@@ -112,12 +119,50 @@ See `.env.example`. Important settings:
 | `REQUEST_RATE=5` | Shared public request pacing; maximum supported value 10 |
 | `OPERATOR_COUNTRY=US`, `OPERATOR_REGION=GA` | Operator jurisdiction, never inferred from the worker's cloud IP |
 | `VALIDATION_INTERVAL_SECONDS=10` | Independent all-gate candidate diagnostics |
+| `BTC_15M_ENABLED=false` | Opt-in Kalshi/Polymarket US BTC discovery; does not enable live execution |
+| `BTC_DISCOVERY_INTERVAL_SECONDS=15` | BTC-only refresh cadence; minimum two seconds |
 
 Blank credentials are safe. Public HTTP scanning does not require execution keys.
 International access is read-only; no VPN/proxy/geographic-restriction evasion.
 The market-data worker also performs signed **GET-only** Kalshi and Polymarket US
 buying-power checks. A successful check does not establish KYC, order permission
 or market-specific eligibility. International Polymarket is US close-only.
+
+## Bitcoin 15-minute research
+
+Enable `BTC_15M_ENABLED=true` only in the intended public research environment.
+Add `BTC` to the persisted Settings supported universe; an environment flag does
+not silently overwrite an existing risk configuration. Keep trading disabled.
+The worker refreshes this short-lived universe separately, prioritizes current
+BTC books and retires expired matches without erasing diagnostic history.
+Kalshi reconstruction preserves every sequenced delta while coalescing published
+depth on a 100-ms cadence. Original receipt/provider timestamps are retained;
+quiet final updates are flushed and lifecycle invalidation remains immediate.
+
+Match the actual measurement endpoints and immutable opening reference, not the
+ticker, slug, trading-open time or a later metadata end date. Both entry
+directions walk executable asks and charge the applicable fees. Unknown sampling,
+rounding, revision, missing-data or discretionary payouts prevent approval;
+an operator cannot waive known published exceptions.
+
+`entry_quantity_step` in Settings defaults to **one contract**, separate from
+the venues' actual fractional fill/unwind increments. Use an explicit smaller
+increment for fractional entries. Non-nested grids fail closed; more than 10,000
+candidate quantities per direction produces `SIZING_GRID_TOO_LARGE`, not an
+undisclosed coarser size or a fabricated liquidity error. Reduce the requested
+maximum quantity or select a supported entry increment instead.
+
+This bounded public probe does not load `.env`, use credentials, query accounts
+or place orders:
+
+```powershell
+$env:PYTHONPATH=(Resolve-Path backend).Path
+.\.venv\Scripts\python.exe scripts\btc_probe.py --samples 3 --interval 5 --max-contracts 100
+```
+
+Conditional price calculations and synthetic profitable tests are not an
+approved hedge, observed fills or realized profit. See section 28 of
+`docs\implementation-report.md` for the investigation and observed limitations.
 
 ## Opportunity-validation pilot
 
@@ -145,6 +190,16 @@ Unknown or blocked coverage is inconclusive, not evidence of no arbitrage.
 Kalshi's signed GET API-key scope check is separate from balance reads and
 account/KYC permission; Polymarket US retail permission still needs independent
 evidence. No order or preview is submitted.
+
+Ordinary sizing modes maximize qualifying net dollar profit rather than
+automatically taking the largest affordable size. Equal-profit sizes prefer less
+capital. When no size qualifies, the least-negative/best modeled result remains
+diagnostic only, alongside the largest evaluated size's result; it is never a
+recommendation to buy a losing position. Candidate details show the gross profit
+needed to cover modeled fees, buffers, additional costs and existing net-profit
+and return thresholds. This is a hurdle at observed prices, not a fabricated
+cheaper quote; changed quotes require recalculating fees. Missing cost,
+settlement and account evidence still prevent qualification.
 
 ## Validation
 

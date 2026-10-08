@@ -53,6 +53,12 @@ def complete_trial(
     due = datetime.fromisoformat(payload["due_at"])
     original_a = Market.model_validate(signal.inputs["first_market"])
     original_b = Market.model_validate(signal.inputs["second_market"])
+    if a.entry_reasons(instant) or b.entry_reasons(instant):
+        return "EXPIRED", {
+            **payload,
+            "failure_reason": "BTC_WINDOW_UNAVAILABLE_AT_FILL",
+            "closed_at": instant.isoformat(),
+        }
     if a.rules_hash != original_a.rules_hash or b.rules_hash != original_b.rules_hash:
         return "CANCELLED", {
             **payload,

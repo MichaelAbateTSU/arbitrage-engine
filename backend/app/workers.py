@@ -78,6 +78,8 @@ async def run_discovery(store: Store, clients: list[VenueClient]) -> None:
         ids: set[str] = set()
         try:
             async for market in client.discover(aliases):
+                if store.settings.btc_15m_enabled and market.bitcoin:
+                    continue
                 if market.id in ids:
                     continue
                 ids.add(market.id)
@@ -109,6 +111,8 @@ async def run_discovery(store: Store, clients: list[VenueClient]) -> None:
                 )
             ).all()
             for row in rows:
+                if store.settings.btc_15m_enabled and row.league == "BTC":
+                    continue
                 if row.id not in ids and row.status != "settled":
                     row.status = "closed"
                     row.payload = {**row.payload, "status": "closed", "tradable": False}
@@ -119,6 +123,35 @@ async def run_discovery(store: Store, clients: list[VenueClient]) -> None:
             retrieved=retrieved,
             last_discovery=now().isoformat(),
             discovery_error=None,
+        )
+    await rematch_all(store)
+
+
+async def run_bitcoin_discovery(store: Store, clients: list[KalshiClient | USClient]) -> None:
+    for client in clients:
+        identifiers: set[str] = set()
+        async for market in client.discover_bitcoin():
+            identifiers.add(market.id)
+            await store.save_market(market)
+        async with store.sessions.begin() as session:
+            rows = (
+                await session.scalars(
+                    select(MarketRow).where(
+                        MarketRow.source == store.source,
+                        MarketRow.venue == client.venue,
+                        MarketRow.league == "BTC",
+                    )
+                )
+            ).all()
+            for row in rows:
+                if row.id not in identifiers and row.status != "settled":
+                    row.status = "closed"
+                    row.payload = {**row.payload, "status": "closed", "tradable": False}
+        await store.health(
+            client.venue,
+            btc_discovery="complete",
+            btc_retrieved=len(identifiers),
+            last_btc_discovery=now().isoformat(),
         )
     await rematch_all(store)
 
@@ -182,7 +215,13 @@ async def persist_stream(
 async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> None:
     reconnects = 0
     while True:
-        markets = [x for x in await store.markets() if x.venue == client.venue and x.tradable]
+        markets = [
+            x
+            for x in await store.markets()
+            if x.venue == client.venue
+            and x.tradable
+            and (x.bitcoin is None or now() < x.bitcoin.window_end)
+        ]
         from app.validation import validation_settings
 
         validation, _, _ = await validation_settings(store)
@@ -198,6 +237,7 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
         )
         markets.sort(
             key=lambda x: (
+                x.bitcoin is None,
                 x.id not in watched,
                 not x.start_time_verified,
                 x.start_time or now(),
@@ -209,6 +249,7 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
         markets = [market for market in markets if mapping_issues[market.id] is None][
             : settings.max_monitored_markets
         ]
+        initial_btc = {m.id: m.rules_hash for m in markets if m.bitcoin is not None}
         generation = uuid4().hex
         selected_ids = {market.id for market in markets}
         await monitor_updates(
@@ -295,7 +336,10 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
                         queue.clear()
                         await monitor_updates(store, values)
 
-                async def watch_focus(initial: set[str] = focus_signature) -> None:
+                async def watch_focus(
+                    initial: set[str] = focus_signature,
+                    btc_initial: dict[str, str] = initial_btc,
+                ) -> None:
                     while True:
                         await asyncio.sleep(2)
                         current, _, _ = await validation_settings(store)
@@ -305,6 +349,14 @@ async def venue_feed(store: Store, client: VenueClient, settings: Settings) -> N
                         )
                         if relevant != initial:
                             return
+                        if settings.btc_15m_enabled:
+                            current_btc = {
+                                m.id: m.rules_hash
+                                for m in await store.bitcoin_markets(client.venue)
+                                if m.tradable and m.bitcoin and now() < m.bitcoin.window_end
+                            }
+                            if current_btc != btc_initial:
+                                return
 
                 generator = (
                     international_stream(markets, observe)
@@ -442,7 +494,7 @@ async def market_data(store: Store, settings: Settings) -> None:
             transport = PublicHTTP(http, settings.request_rate)
             clients: list[VenueClient] = [
                 KalshiClient(transport, settings),
-                USClient(transport),
+                USClient(transport, settings),
                 InternationalClient(transport),
             ]
 
@@ -450,6 +502,18 @@ async def market_data(store: Store, settings: Settings) -> None:
                 await run_discovery(store, clients)
 
             async with asyncio.TaskGroup() as tasks:
+                if settings.btc_15m_enabled:
+                    btc_clients: list[KalshiClient | USClient] = [
+                        client for client in clients if isinstance(client, (KalshiClient, USClient))
+                    ]
+                    tasks.create_task(
+                        guarded_loop(
+                            store,
+                            "btc-discovery",
+                            lambda: run_bitcoin_discovery(store, btc_clients),
+                            settings.btc_discovery_interval_seconds,
+                        )
+                    )
                 tasks.create_task(
                     guarded_loop(
                         store,
@@ -679,23 +743,33 @@ async def role_runner(role: str, store: Store, settings: Settings) -> None:
         await store.release(role, owner)
 
 
+async def initialize_worker(store: Store, role: str, attempts: int = 60, delay: float = 3) -> None:
+    for attempt in range(attempts):
+        try:
+            await store.initialize()
+            break
+        except (SQLAlchemyError, OSError, TimeoutError) as exc:
+            log.warning(
+                "worker_waiting_for_database_and_migrations",
+                role=role,
+                attempt=attempt,
+                error_code=type(exc).__name__,
+            )
+            await asyncio.sleep(delay)
+    else:
+        raise RuntimeError("DATABASE_OR_MIGRATIONS_UNAVAILABLE")
+
+
 async def main(role: str) -> None:
     configure_logging()
     settings = get_settings()
     engine, sessions = create_database(settings)
     store = Store(sessions, settings)
-    for attempt in range(60):
-        try:
-            await store.initialize()
-            break
-        except SQLAlchemyError:
-            log.warning("worker_waiting_for_database_and_migrations", role=role, attempt=attempt)
-            await asyncio.sleep(3)
-    else:
-        raise RuntimeError("DATABASE_OR_MIGRATIONS_UNAVAILABLE")
-    roles = ["market-data", "analysis", "maintenance"] if role == "all" else [role]
-    tasks = [asyncio.create_task(role_runner(item, store, settings)) for item in roles]
+    tasks: list[asyncio.Task[None]] = []
     try:
+        await initialize_worker(store, role)
+        roles = ["market-data", "analysis", "maintenance"] if role == "all" else [role]
+        tasks = [asyncio.create_task(role_runner(item, store, settings)) for item in roles]
         await asyncio.gather(*tasks)
     finally:
         for task in tasks:

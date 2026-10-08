@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -193,5 +194,49 @@ async def test_postgres_focused_records_and_coverage_survive_restart():
         )
         assert book["monitoring"]["selection"] == "selected"
         assert book["monitoring"]["subscription"] == "confirmed_by_data"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("ARB_TEST_POSTGRES_URL"),
+    reason="Requires explicitly isolated, migrated PostgreSQL database",
+)
+async def test_postgres_book_microseconds_and_older_update_rejection():
+    settings = Settings(
+        _env_file=None,
+        database_url=os.environ["ARB_TEST_POSTGRES_URL"],
+        environment="test",
+        data_mode="demo",
+        kalshi_api_key=None,
+        kalshi_private_key=None,
+        polymarket_us_key_id=None,
+        polymarket_us_secret_key=None,
+    )
+    engine, sessions = create_database(settings)
+    store = Store(sessions, settings)
+    try:
+        await store.initialize()
+        markets = demo_markets()
+        market = markets[0].model_copy(
+            update={
+                "id": "postgres-btc-timestamp-regression",
+                "external_id": "demo-postgres-btc-timestamp-regression",
+            }
+        )
+        await store.save_market(market)
+        instant = datetime(2030, 1, 1, 14, 0, tzinfo=UTC)
+        book = demo_books(markets, 0)[0].model_copy(
+            update={"market_id": market.id, "received_at": instant}
+        )
+        await store.save_books([book])
+        later = instant + timedelta(microseconds=1)
+        book.received_at = later
+        await store.save_books([book])
+        assert (await store.books([market.id]))[(market.id, book.outcome)].received_at == later
+        book.received_at = instant
+        await store.save_books([book])
+        restarted = Store(sessions, settings)
+        assert (await restarted.books([market.id]))[(market.id, book.outcome)].received_at == later
     finally:
         await engine.dispose()

@@ -610,6 +610,7 @@ function Opportunities() {
                 "EPL",
                 "ATP",
                 "WTA",
+                "BTC",
               ].map((x) => (
                 <option key={x}>{x}</option>
               ))}
@@ -733,6 +734,21 @@ function RulesView({ market }: { market: Market }) {
       <h3>{venueName(market.venue)}</h3>
       <small>{market.external_id}</small>
       <p>{market.rules_text || "No official rules were retrieved."}</p>
+      {market.bitcoin && (
+        <>
+          <p>
+            BTC 15-minute BRTI window: {time(market.bitcoin.window_start)} to{" "}
+            {time(market.bitcoin.window_end)} UTC. Opening reference:{" "}
+            {market.bitcoin.opening_reference ?? "not yet published"}. YES means
+            Up, including an equal closing price. Normal agreement is not
+            settlement approval.
+          </p>
+          <JsonEvidence
+            title="Bitcoin window and exceptional settlement evidence"
+            data={market.bitcoin}
+          />
+        </>
+      )}
       <JsonEvidence
         title="Normalized settlement evidence"
         data={market.rules}
@@ -948,6 +964,7 @@ function NormalizationEditor({
         yes_team: market.yes_team,
         start_time: market.start_time,
         rules: market.rules,
+        ...(market.bitcoin ? { bitcoin_policy: market.bitcoin.policy } : {}),
         evidence: market.rules.evidence,
         note: "Cite official contract terms and scheduled start source for every required field.",
       },
@@ -1596,6 +1613,16 @@ function RiskForm({
                   </option>
                 ))}
               </select>
+            </label>
+            <label>
+              Entry quantity increment (contracts)
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={risk.entry_quantity_step}
+                onChange={(e) => change("entry_quantity_step", e.target.value)}
+              />
             </label>
           </div>
           <details className="evidence">

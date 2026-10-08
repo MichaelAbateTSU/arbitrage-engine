@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Wire(BaseModel):
@@ -20,6 +20,18 @@ class KalshiMarket(Wire):
     yes_sub_title: str = ""
     price_ranges: list[dict[str, str]] = Field(default_factory=list)
     result: str = ""
+    open_time: str | None = None
+    close_time: str | None = None
+    floor_strike: Decimal | None = None
+    strike_type: str | None = None
+    notional_value_dollars: Decimal | None = None
+
+    @field_validator("floor_strike", mode="before")
+    @classmethod
+    def exact_strike(cls, value: Any) -> Any:
+        if isinstance(value, (float, bool)):
+            raise ValueError("Strike requires an exact decimal")
+        return value
 
 
 class KalshiPage(Wire):
@@ -62,6 +74,33 @@ class InternationalBook(Wire):
     min_order_size: str
 
 
+class Amount(Wire):
+    value: Decimal
+    currency: str
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def exact_amount(cls, value: Any) -> Any:
+        if isinstance(value, (float, bool)):
+            raise ValueError("Amount requires an exact decimal")
+        return value
+
+
+class CryptoAsset(Wire):
+    assetClass: str
+    symbol: str
+
+
+class AssetPriceTerms(Wire):
+    marketType: str
+    asset: CryptoAsset
+    indexSymbol: str
+    horizon: str
+    windowStart: str | None = None
+    windowEnd: str | None = None
+    priceToBeat: Amount | None = None
+
+
 class USMarket(Wire):
     id: str
     slug: str
@@ -77,15 +116,11 @@ class USMarket(Wire):
     feeCoefficient: Decimal | None = None
     orderPriceMinTickSize: Decimal | None = None
     minimumTradeQty: Decimal | None = None
+    assetPriceTerms: AssetPriceTerms | None = None
 
 
 class USPage(Wire):
     markets: list[USMarket]
-
-
-class Amount(Wire):
-    value: Decimal
-    currency: str
 
 
 class USLevel(Wire):

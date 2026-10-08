@@ -635,3 +635,665 @@ preserves its evidence. Further time alone cannot close settlement, permission
 and cost gaps. Within this reviewed scope, reconsider the venue/contract family
 or obtain genuinely different compatible governing terms; do not accept independent
 fair-price settlement, freshen stale books or lower thresholds to create trades.
+
+## 25. Bounded feasibility pass: evidence, not another feature release
+
+**Decision: no fully evidenced executable pair was established. Pause the
+provider-dependent validation gates; do not enable trading or interpret this as
+an economically negative result.** The reviewed sports universe does not offer
+an approved hedge. A materially different, real Bitcoin up/down candidate was
+identified outside the implemented sports-only discovery scope, so this pass
+does **not** establish that the entire Kalshi/Polymarket US combination is
+impossible.
+
+The pass used existing services and read-only public/account evidence. It added
+no dashboard features, servers, live orders, order previews, approvals, funding
+actions, production cost attestations or relaxed thresholds. The executable
+deployment remains `b6768380e693304c8ceaad51fc0c3f14d924b30e`.
+Only documentation and focused fee regressions changed in the repository.
+The original collection and coverage clocks were not restarted.
+
+### Scope and settlement classifications
+
+Read-only cloud job `job-db0ob1id0e5s73cgradg` succeeded. At **2026-10-03
+22:45:38.774821 UTC**, its current inventory contained **242 candidate pairs**:
+72 NBA/US, 56 NFL/US, 58 NBA/international and 56 NFL/international.
+It exported eight normalized sports profiles under a 12-profile review cap,
+including three explicitly inventory-only comparisons. Duplicate NFL/
+international postponement policies are collapsed below instead of treating
+additional games or missing overtime text as new settlement discoveries.
+
+Here, **proven incompatible** means documented terms break the proposed
+constant-$1 complementary payout. It does not mean no deeply discounted,
+separately bounded strategy could ever exist. **Insufficient evidence** means
+the relevant payout floor or contract identity has not been established.
+**Potentially compatible** is a research priority, never an individual approval.
+The engine's conservative 0..2 fair-price envelope is not evidence that either
+endpoint actually occurs.
+
+| Family comparison | Current scope | Classification | Source-backed reason |
+| --- | --- | --- | --- |
+| NFL: Kalshi / US | 56 candidates | Proven incompatible with the constant-$1 hedge | Kalshi switches to fair-price settlement when the game has not started within 48 hours; US permits rescheduling within two weeks. A game starting on day three can settle one leg at an independent fair price and the other at a binary game result. |
+| NBA: Kalshi / US | 72 candidates | Insufficient evidence at family level; the sampled pair has a proven identity mismatch | The sampled Kalshi rule names October 7, while the US rule names October 16. Even a corrected fixture still needs the 48-hour versus two-calendar-day interpretation and independent fair-price exceptions reconciled. |
+| MLB: Kalshi / US | Inventory-only; zero candidate pairs | Proven incompatible with the constant-$1 hedge | The sampled Kalshi rule switches to fair price for cancellation or rescheduling beyond two days; US permits two weeks. Matching the sampled teams/date does not repair the postponement payout mismatch. |
+| NHL: Kalshi / US | Inventory-only; zero candidate pairs | Insufficient evidence | The samples are different fixtures, not a fabricated pair. Kalshi's 48-hour/cancellation rule and US's two-calendar-day rule do not establish shared fair-price, cancellation or discretionary-settlement bounds. |
+| NBA/NHL policy: Kalshi / international | 58 candidates in this policy group | Proven incompatible with the constant-$1 hedge; separately restricted | Kalshi's 48-hour/fair-price policy differs from holding until the rescheduled game finishes and a 50-50 cancellation settlement. International access remains US-close-only. |
+| NFL: Kalshi / international | 56 candidates across two normalized profiles | Proven incompatible with the constant-$1 hedge; separately restricted | The same 48-hour versus until-completed difference remains after collapsing the duplicate postponement policy. Missing explicit overtime text does not create another defensible hedge. |
+| MLB: Kalshi / international | Inventory-only; zero candidate pairs | Proven incompatible with the constant-$1 hedge; separately restricted | Two-day fair-price fallback differs from until-completed/50-50 settlement; the inventory samples also name different event dates. |
+
+The postponement counterexample does not need to assert a particular actual
+fair-price settlement: if the Kalshi-held outcome settles at an intermediate
+fair price and the later game makes the opposite venue's purchased outcome
+worth zero, the combined payout is that fair price, not $1. An illustrative
+$0.40 payout would leave only $0.40 before costs. This is a permitted-rule
+counterexample, **not an observed loss, provider-confirmed $0.40 floor or proof
+that the engine's zero bound is attained**.
+
+The concrete NBA identity rejection is:
+`KXNBAGAME-26OCT07GSWPOR-GSW` versus
+`aec-nba-por-gs-2026-10-16`. Their full rule texts specify October 7 and
+October 16 respectively; the US `gameStartTime` is October 17 at 02:00 UTC.
+This is not inferred solely from slug formatting. Source rule hashes were
+`dfaf389cd474ca7773bc4fa3bece49eb973a5433b11710e8f2e9cf31943ad0c4`
+and `cf9e4ba89477696c478f826c15dced7ea5d79fe11ebfbd60c4261b0565ed027c`.
+Do not approve this candidate as the same game. The existing unproven-identity
+and independent-approval gates continue to prevent qualification.
+
+#### Materially different production families
+
+The pass also queried the documented retail category filter, rather than
+assuming the sports scanner represents every product on either venue.
+At **22:52:15 UTC**, public production GET requests for active, nonclosed
+markets returned **zero weather listings and 63 crypto listings**, below the
+100-record first-page cap. This is a time-bound result for those public filters,
+not proof that weather can never be listed or that every returned crypto
+contract is still inside its resolution window. Some metadata marked OPEN
+even when the rule-defined observation deadline had already passed.
+
+Four different crypto comparisons were then bounded to public rule samples:
+
+| Comparison | Classification | Finding |
+| --- | --- | --- |
+| 15-minute BTC up/down | Potentially compatible; individual proof incomplete | An actual pair shared BRTI, the 22:45-23:00 UTC window, an inclusive Up criterion and the $84,780.82 opening reference. Exact sample boundaries, rounding, missing data, revisions and independent review remain unproven. |
+| Annual BTC $150k one-touch | Insufficient evidence | Both sampled terms use a 60-second 20%-trimmed BRTI mean, but issuance windows and the 23:59 versus midnight cutoff are not identical. A directional dominance proof must cover the full observation intervals and exceptional settlement, not merely the same headline target. |
+| BTC price range | Insufficient evidence; sampled contracts are not equivalent | The sampled Kalshi contract uses a simple 60-second mean and an October 4 expiry; the US year-end contract uses a 20%-trimmed mean at January 1 midnight. This is neither a shared statistic nor a matched expiry. |
+| Monthly BTC one-touch | Insufficient evidence; sampled methodologies differ | The sampled Kalshi monthly rule describes cumulative minute-by-minute trimming and an explicit missing-data No outcome; the US one-touch rule describes rolling sixty-second trimming. Similar titles do not establish equal payouts or a directional guarantee. |
+
+At **22:53:53 UTC**, the concrete potentially compatible pair was
+`KXBTC15M-26OCT031900-00` and
+`cpc-btc-updown-15m-2026-10-03-2245z`. Both were reported active/open,
+and both closing conditions were "at least" the same opening reference.
+The Kalshi series pointed to the full
+[CRYPTO governing terms](https://assets.kalshi.com/contract_terms/CRYPTO.pdf),
+which were read in this pass, not just the market summary. They specify a
+60-second simple BRTI average, exclusion of post-expiration revisions,
+missing/incomplete data resolving affected strikes to No, and independent
+review/payout powers under the Kalshi rulebook.
+
+The US [crypto FAQ](https://docs.polymarket.us/faqs/crypto-faqs) specifies
+the inclusive sample interval `[T - 59 seconds, T]`, two-decimal rounding,
+and deferral until complete data or exchange review. Kalshi's "sixty seconds
+prior" wording does not independently prove the same set of seconds.
+Equal displayed opening prices do not settle this question.
+The FAQ's rollout note said automated families were in preprod, but the
+authenticated venue is not being inferred from that note: the actual sampled
+production retail response contained typed `assetPriceTerms` for these windows.
+
+The useful next review direction is **Kalshi NO + US Up**, conditional on
+identical normal-resolution values. With complete identical values it pays $1
+whether the price rises, falls or ties. Under the documented Kalshi missing-data
+No rule, that Kalshi leg alone would pay $1, provided the normal fallback is not
+overridden. Independent discretionary review, different sample sets or different
+revision handling still have no verified cross-venue floor. The reverse
+direction does not inherit this missing-data protection.
+
+This is therefore **not a fully approved pair, a measured profitable spread,
+continuous two-sided pricing or a trading recommendation**. The sampled window
+ends at 23:00 UTC on October 3 and is not an evergreen instrument. Any future
+instance requires fresh exact identities, governing terms, prices and evidence.
+No crypto instrument was added to the current scanner or coverage counters.
+
+### Retail US feed: two short traces, with exact instrument identity
+
+The first 45-second control trace ran **22:45:26.865791-22:46:12.654463 UTC**
+and received 18 marketData frames. It included the retained older
+`aec-nba-gs-lal-2026-10-13` instrument, not the currently selected
+`aec-nba-lal-gs-2026-10-06`. Those are distinct contracts; the old book was
+not substituted for the current one.
+
+A second trace used the **five exact slugs identified by the 22:45 cloud audit**.
+Its 30-second subscription window began **22:49:29.691104 UTC**; post-trace
+REST sampling finished **22:50:01.444434 UTC**.
+The socket authenticated at the documented retail endpoint
+`wss://api.polymarket.us/v1/ws/markets`, subscribed with
+`SUBSCRIPTION_TYPE_MARKET_DATA`, and received **22 marketData frames** echoing
+request ID `bounded-blocker-trace`. All were `MARKET_STATE_OPEN`.
+WebSocket ping/pong succeeded. There was **no separate subscription-ack frame**;
+matching actual data envelopes confirm subscription service, not an invented ack.
+
+| Exact retail instrument | Frames / distinct ladder hashes | Latest provider timestamp (UTC) | Corresponding receipt timestamp (UTC) | Interpretation during this trace |
+| --- | --- | --- | --- | --- |
+| `aec-nfl-ten-bal-2026-10-04` | 3 / 3 | 22:49:50.315355072 | 22:49:50.406336 | Actual changes delivered in 61-91 ms after the initial snapshot. |
+| `aec-nfl-atl-no-2026-10-05` | 4 / 3 | 22:49:55.392173360 | 22:49:55.508255 | Actual changes delivered in 116-146 ms after the initial snapshot. |
+| `aec-nba-lal-gs-2026-10-06` | 7 / 1 | 22:49:52.153704462 | 22:49:52.275032 | Repeated identical ladders had advancing provider timestamps, delivered in 107-149 ms. |
+| `aec-nba-den-uta-2026-10-06` | 7 / 1 | 22:49:54.828987793 | 22:49:54.907522 | Repeated identical ladders had advancing provider timestamps, delivered in 48-131 ms. |
+| `aec-nba-gs-lac-2026-10-04` | 1 / 1 | 22:32:32.271818111 | 22:49:29.852972 | Only an initial snapshot; matching before/after REST snapshots retained the old source time. |
+
+This rules out a **global feed stall, rejected subscriptions or inaccessible
+institutional-only integration during these windows**. It does not certify
+every market's continuous health. The quiet Clippers book is consistent with
+no book change observed; a market-specific stale publisher/cache cannot be
+excluded from 30 seconds and transport pong alone.
+
+REST was not a freshness substitute: the Tennessee post-trace response still
+returned 22:49:30.718325038 after the socket had delivered 22:49:50.315355072,
+and Atlanta REST retained 22:48:53.537174927 after the socket reached
+22:49:55.392173360. These were older snapshots, not merely rounding noise.
+
+The actual `USBookData` parser converted
+`2026-10-03T22:49:27.531638892Z` to
+`2026-10-03T22:49:27.531638+00:00`. It preserved UTC, seconds and microseconds;
+discarding sub-microsecond precision cannot explain minutes or hours of age.
+`us_books()` preserves this provider time as `Book.exchange_at`; it does not
+replace it with receipt time. The
+[retail book schema](https://docs.polymarket.us/api-reference/markets/get-market-book)
+declares `transactTime` as date-time without a last-change/heartbeat/currentness
+definition. Advancing timestamps on identical ladders also rule out assuming
+it always means the last ladder change.
+
+The implemented interface matches the
+[retail market socket documentation](https://docs.polymarket.us/api-reference/websocket/markets):
+market slugs and Ed25519 API-key handshake, alongside public gateway metadata/books.
+The institutional data interface uses symbols, reference data, gRPC and different
+authentication/firm-account concepts. Retail credentials were not repurposed to
+probe institutional entitlements.
+
+Raw public subscription/data frames and before/after snapshots were retained
+as session artifacts `blocker-current-us-raw-public.jsonl`; the condensed trace
+is `blocker-current-us-trace-public.json`. No keys, headers, signatures,
+account bodies or balances were exported. Conservative freshness limits remain
+unchanged pending the provider's per-market currentness semantics.
+
+### Fees and the six route-specific cost components
+
+The deployed function, not a reimplementation, returned **$1.74 for 100 contracts
+at $0.50** using coefficient `0.0695`. It returned **$0.02** and **$0.04** for
+exact half-cent controls $0.025 and $0.035. All **286 mapped US moneyline
+instruments** in that cloud audit used `us_quadratic:0.0695`.
+The official [US schedule](https://docs.polymarket.us/fees) was effective
+**October 1, 2026 at 10 AM ET**, so it applied at the audit time.
+
+The calculator sums the exact fees across consumed levels and half-even rounds
+the cumulative amount. The schedule caps split-fill commission at that amount
+and permits downward adjustments. Thus the deployed number is a **conservative
+upper bound for multiple fills**, not an exact reconstruction of each collected
+fill's fee. Maker rebates and volume tiers are not assumed. The separate combo
+curve is not applicable to the single-instrument moneyline or up/down comparison.
+Added regressions cover the requested 100-lot example and both half-even ties.
+
+For additional costs, this pass defines a **proposed, not adopted**, USD-only
+bank/ACH route: fully cleared own-name USD bank funds prefund both venues;
+purchased complementary positions are held to settlement; withdrawals return
+to their original funding accounts. No FX, crypto wallet or in-episode
+cross-venue funding transfer is assumed. The user has not confirmed this route,
+bank fees or allocation policy; these findings were not silently promoted to
+production attestations.
+
+| Exact component | Applicable route / allocation | Sourced status | Evidence still required |
+| --- | --- | --- | --- |
+| `funding` | USD bank ACH into each venue; amortize any actual transfer/processor charge over its funded contracts, without double charging prefunded episodes | Kalshi venue ACH charge: **verified zero** from [Bank Deposits](https://help.kalshi.com/en/articles/13823798-bank-deposits). US Aeropay ACH charge: **unresolved**; [its route page](https://docs.polymarket.us/learn/deposits/deposit-methods/bank-transfer) gives no explicit fee amount. | Confirm the actual route, US venue/processor deposit fee and originating bank's charges; exclude uncleared instant-credit assumptions. |
+| `conversion` | USD bank funds, USD collateral and USD contract payouts throughout | **Not applicable, conditional on this exact USD-only route**; public contract/book currencies are USD. | Confirm no card, FX, USDC or other conversion is actually used. This is not a global verified-zero conversion claim. |
+| `withdrawal` | USD ACH back to each original own-name funding bank; allocate any actual withdrawal cost once per withdrawal, not per price observation | Venue charges: **verified zero** from [Kalshi Bank Withdrawals](https://help.kalshi.com/en/articles/13823803-bank-withdrawals) and [US withdrawal overview](https://docs.polymarket.us/learn/deposits/withdraw-funds/overview). All-in bank-side cost: **unresolved**. | Confirm destination bank charges and adopted allocation. US funds must clear and return to the original funding source; its published typical arrival is 3-4 business days. |
+| `settlement` | Automatic cash settlement of held event contracts; any separate clearing/settlement charge allocated to settled quantity | Kalshi's indexed official [July 7, 2026 schedule](https://kalshi.com/docs/kalshi-fee-schedule.pdf) explicitly says no settlement fee; current-version direct reconfirmation is **unresolved** because the PDF request returned 429. US separate settlement charge is **unresolved**: [automatic balance settlement](https://docs.polymarket.us/learn/markets/contract-settlement) is not an explicit zero-fee statement. | Confirm the current Kalshi schedule and whether US charges a distinct retail settlement/clearing fee in addition to execution commission. Do not infer zero from silence or retry around a rate limit. |
+| `rebalancing` | No transfer between venues during one strictly prefunded buy-and-hold episode | **Not applicable to that proposed episode only**. | Confirm that operating policy. Later replenishment belongs to its actual funding/withdrawal route and allocation; emergency unwind trading fees, slippage and failed-hedge losses remain separately charged, not zeroed. |
+| `network` | Bank ACH plus venue-hosted USD trading/settlement; no on-chain transaction | Blockchain gas: **not applicable, conditional on the proposed route**. | Confirm no crypto transfer/wallet route. Render, database, internet and other operating expenses remain separate and must be deducted when assessing economic results. |
+
+No arbitrary amounts, fee-free deposit assumptions or undocumented settlement
+zeros were invented. Complete additional-cost evidence remains unavailable in
+production until these source/route/operator gaps close. Trading commissions
+are separate from this six-component table; $1.74 is not the pair's all-in cost.
+Capital lockup and operating expense are also not proved zero by this table.
+
+### Current order permission and precise provider questions
+
+The fresh stored permission audit verified account read access for Kalshi and
+US. Kalshi's GET-only key evidence verified trading scope, primary-account
+binding and current location-attestation expiry. **Neither venue returned an
+authoritative current account/KYC/market-specific permission verdict.**
+US key trading-scope probing was reported unsupported by the implemented
+retail probe, not as proof its key cannot trade.
+International remained restricted/US-close-only. No inference was drawn from
+the Render location.
+
+The US [authentication documentation](https://docs.polymarket.us/api-reference/authentication)
+describes identity verification before key creation, but the
+[account-review documentation](https://docs.polymarket.us/learn/get-started/account-under-review)
+also describes continuing KYC/AML review. Past onboarding plus working reads
+is not proof of present unrestricted permission. The
+[trading restrictions](https://docs.polymarket.us/learn/trading/access-and-limits/trading-restrictions)
+also include contract-specific participant restrictions. No real order or
+preview was submitted to test these conditions.
+
+The dependencies are now specific enough for a provider/app evidence request:
+
+| Dependency | Exact answer needed before proceeding |
+| --- | --- |
+| Crypto settlement | For the exact BRTI up/down family, confirm both venues' 60 sample timestamps, endpoint inclusion, two-decimal tie rounding, immutable opening reference, revision cutoff and all missing-data/cancellation/review outcomes. Reconcile Kalshi's incomplete-data No and discretionary rulebook powers with US deferral/review; establish a payout floor for Kalshi NO + US Up, not just matching normal descriptions. |
+| Retail book currentness | Define `transactTime` for full retail marketData. How is an unchanged book certified current? Is there a guaranteed per-market heartbeat, sequence or authoritative snapshot timestamp? Explain advancing times with unchanged ladders, quiet initial snapshots, and older REST snapshots than the socket. |
+| US additional charges | Confirm venue and Aeropay processing fees for own-name USD ACH deposits, and any separate retail settlement/clearing charge beyond the published trading commission; obtain the user's bank tariff and chosen allocation. |
+| Account permission | Obtain current app/account/provider evidence for approved identity/jurisdiction, unrestricted new-position trading, this retail API key's order entitlement and the selected contract's participant eligibility. Ask for a supported read-only entitlement endpoint if one exists; do not substitute balance access or institutional identity APIs. |
+
+These are drafted requests, **not support messages already sent**. No credentials
+or personal/account identifiers are included in this public report.
+
+**Pass outcome:** retain the existing diagnostic history and disabled execution.
+Sports approvals remain blocked; the newly identified crypto family is a bounded
+alternative research candidate, not permission to expand live execution.
+Resume qualifying shadow trials only after one exact, independently reviewed
+pair has a verified all-scenario payout floor, reliable two-sided books, current
+order permission, complete route-specific costs and funded executable-size
+pricing. Until then, zero qualified opportunities is **inconclusive about
+economic edge**, not evidence that spreads cannot beat costs.
+
+## 26. Provider clarification requests: initial preparation
+
+This section records the earlier unsent stage. Subsequent authorized delivery
+and provider replies are recorded in section 27.
+
+Following authorization to proceed with the evidence requests, verified public
+contact sources identified
+[Kalshi support](https://help.kalshi.com/en/articles/13823855-contact-kalshi-support)
+and [Polymarket US support](https://docs.polymarket.us/learn/faq/contact-support).
+The published addresses are `support@kalshi.com` and `support@polymarket.us`.
+Kalshi prefers its authenticated support messenger and recommends using the
+email registered to the account if email contact is necessary. Existing open
+support conversations should not be duplicated.
+
+Two complete, separate RFC 822 email drafts were prepared as session artifacts:
+`provider-kalshi-support.eml` and `provider-polymarket-us-support.eml`.
+Both omit the From field and carry `X-Unsent: 1`; neither is a send receipt.
+They contain only the necessary public contract references, historical public
+market-data observations and precise requests for current governing rules,
+read-only eligibility verification and additional-cost schedules.
+No account IDs, balances, API credentials, signatures or personal identifiers
+are included.
+
+The available mail connection is a work mailbox. Its suitability as the
+venue-contact sender could not be established, and the user was unavailable
+to select a sender. Therefore **neither message was sent, no support ticket
+number exists, and no provider response or permission approval was obtained**.
+No email was sent from an unconfirmed work address or substituted account.
+Private session artifact `provider-requests-status.json` records the exact
+prepared/not-sent state and empty receipt fields.
+
+The Kalshi request covers the exact sixty sampled seconds, price rounding,
+immutable opening reference, revisions, data deadlines, missing-data No rule,
+review/payout exceptions, effective settlement/funding charges and a secure
+GET-only/account-screen entitlement-verification process. The US request adds
+retail `transactTime` semantics, unchanged-book currentness, per-market heartbeat/
+sequence/cache guarantees, Aeropay deposit charges and separate clearing charges.
+The expired October 3 22:45-23:00 UTC pair is explicitly historical evidence,
+not a requested trade.
+
+Sending remains dependent on an appropriate confirmed sender/channel.
+Account-specific verification must use the provider's secure process; an email
+answer about a general API feature cannot by itself approve an individual
+account or independently validate every settlement scenario.
+BTC scanner expansion and qualification remain gated on actual answers and
+complete evidence. Production configuration, approvals, live execution settings,
+orders, previews, services and original collection clocks were not changed.
+
+## 27. Authorized provider submission and external evidence dependency
+
+After the user authorized continued autonomous work with the disclosed sender,
+both existing requests were submitted at **2026-10-04 00:22:47 UTC**.
+Each send action returned HTTP 202, and each message was independently found
+exactly once in Sent Items with `isDraft=false`, the expected subject and the
+published support recipient. The private session manifest stores message/
+conversation receipts; personal sender addresses and mailbox identifiers are
+not copied into this public report. Neither message contained API credentials,
+account balances, private account identifiers or repository source code.
+
+Both venues subsequently replied in the same conversations, acknowledging
+delivery. These were **automated support responses, not independent human
+contract review or account permission**:
+
+| Provider response | Received at (UTC) | Evidentiary result |
+| --- | --- | --- |
+| Kalshi Support AI | October 4, 00:24:11 | Pointed to general API documentation/read-only key creation and typical settlement timing, but explicitly did not confirm specific rule interpretations. No sample-set, exceptional-payout, cost or current account-entitlement gap closed. |
+| Polymarket US automated support | October 4, 00:24:40 | Could not verify crypto rulebook details, retail currentness guarantees, account eligibility or separate ACH/clearing charges. Cited an obsolete July 1 taker coefficient of 0.06, conflicting with the published October 1 coefficient 0.0695 and current market metadata. Its unsourced cost-basis adjustment claim was not accepted as a verified settlement rule. |
+| Polymarket US correction/routing acknowledgment | October 4, 00:30:28 | Acknowledged that its earlier fee reference was not current/authoritative and said the conversation was being passed to its team for the BTC settlement-rule questions. This confirms routing, not the requested payout floor. |
+
+At **00:29:36 UTC**, one focused follow-up in each existing thread requested
+human contract-rules/market-operations review. Both follow-ups were verified in
+Sent Items. No duplicate initial requests or new parallel support cases were
+created. The follow-ups prioritized settlement first, distinguished contract
+interpretation from proprietary implementation guidance, and deferred the
+remaining permission/data/cost questions until this dependency closes.
+Kalshi human routing was not yet confirmed at this capture.
+
+The US follow-up explicitly corrected the stale fee reference using the current
+official schedule. **The calculator and metadata rate remain 0.0695.** An
+automated answer cannot override a newer dated primary source or justify
+undercharging fees. A repeated, appropriately delayed direct Kalshi fee-PDF
+check still returned 429; its current-version confirmation remains unresolved.
+
+### Independent normal-settlement check
+
+The expired BTC example was also checked through public resolution endpoints,
+without submitting a trade:
+
+| Instrument | Opening BRTI reference | Closing BRTI reference | Final result |
+| --- | --- | --- | --- |
+| `KXBTC15M-26OCT031900-00` | $84,780.82 | $84,767.33 | `finalized`, result No, YES payout $0.0000; settlement timestamp October 3, 23:00:07.566029 UTC |
+| `cpc-btc-updown-15m-2026-10-03-2245z` | $84,780.82 | $84,767.33 | `MARKET_STATUS_RESOLVED`, closed; retail settlement endpoint returned Up/long payout 0 |
+
+The published settlements imply **$1 combined gross payout for a hypothetical
+Kalshi NO + US Up pair** in this single normal-resolution example.
+The index price $84,767.33 is not a contract
+payout or an executable purchase price. Identical references/outcomes in one
+window do **not** prove identical sample sets at every boundary, independent
+review behavior, a complete all-scenario floor or positive net profit.
+No acquisition costs or fills were measured and no trading edge was claimed.
+The public evidence is preserved in `provider-normal-settlement-public.json`;
+the paired contract remains unapproved.
+
+### Continuation policy
+
+There is now a specific external dependency, not a missing implementation:
+human/provider clarification of the contract samples and exceptional payout
+rules. Any reply is retained with source and time; automated answers, general
+API access and support-ticket acknowledgment are not treated as approvals.
+Account-specific verification must still bind to the actual venue account/key
+through its secure process. The proposed bank/ACH route is still not an adopted
+or funded operator route.
+
+Bounded follow-up checks use only the two existing support conversations, every
+four hours for up to 72 hours from submission. They must not resend existing
+messages, create duplicate cases, repeatedly chase automated responders,
+publish private mailbox records, weaken thresholds or reset collection clocks.
+If authoritative clarification arrives, continue the corresponding evidence
+review and only advance shadow monitoring after every existing gate is actually
+satisfied. If providers cannot establish a defensible floor, reject the family.
+If the deadline expires without sufficient answers, stop automated checks and
+retain the explicit blocker rather than poll indefinitely.
+
+The same-session continuation was registered and independently read back at
+**October 4, 00:35:48 UTC**, with a 240-minute cadence and first scheduled wake
+**October 4, 04:35:48 UTC**. The support-query cutoff is **October 7,
+00:22:47 UTC**; a wake at or beyond that cutoff must clear the automation
+without querying the providers again. This is a registered continuation, not
+a claim that an offline host can run or that a provider will answer by then.
+The last immediate check found no unprocessed substantive reply. Further
+progress now depends on external clarification, not additional feature work.
+
+Live execution remains disabled. BTC discovery/monitoring, approvals, account
+settings, funding, orders, previews and production configuration remain unchanged.
+
+## 28. Bitcoin 15-minute investigation and paper pipeline (October 5, 2026)
+
+**Outcome:** implemented and tested a local, opt-in BTC research pipeline.
+Observed genuine matching windows and both authenticated market-data feeds.
+No approved executable opportunity, measured fill or realized profit was
+established. The current venue combination remains **insufficiently evidenced**,
+not proven universally impossible. No safeguards were lowered to produce trades.
+
+The preceding section describes historical provider follow-up registration.
+The user stopped that automation on October 4; it was cleared and has not been
+restarted. This pass did not send support messages, change account permission,
+fund venues, place orders, alter the private environment file or deploy changes.
+
+### Primary-source findings
+
+Sources read during this pass:
+
+- [Polymarket US crypto FAQ](https://docs.polymarket.us/faqs/crypto-faqs).
+- [US market API](https://docs.polymarket.us/api-reference/market/overview).
+- [US fee schedule](https://docs.polymarket.us/fees).
+- [Kalshi market API](https://docs.kalshi.com/api-reference/market/get-market).
+- Complete [Kalshi CRYPTO governing terms](https://assets.kalshi.com/contract_terms/CRYPTO.pdf),
+  SHA256 `fde90b9c0825df277b0b2b2be6239af221eafd01a624c1b2d3a9eaff2d6fe75c`.
+
+| Question | Evidence and consequence |
+| --- | --- |
+| Normal benchmark | Both describe sixty-sample BRTI averages, a two-decimal reference and Up/YES on equality. Matching published opening values is necessary, not sufficient. |
+| Exact sampled seconds | US specifies an inclusive interval ending at the observation time. Kalshi's before/prior wording does not establish identical endpoints. Its policy stays unknown. |
+| Benchmark tie rounding | Nearest-two-decimals language does not establish half-even versus half-up. Trading-fee rounding is not benchmark-rounding evidence. |
+| Revisions | Kalshi excludes revisions after expiration; that is not evidence of an identical cutoff at the measurement endpoint. |
+| Incomplete data | Kalshi describes affected strikes resolving No; US requires complete data or review rather than a partial-data calculation. Exceptional combined payouts remain unproven. |
+| Discretionary review | Current Kalshi governing terms retain independent review/payout powers. The API cannot annotate that known provision away. |
+| Fees | Observed BTC metadata supplied Kalshi coefficient 0.07 and US 0.0695. US's applicable October 1 schedule remains 0.0695; announced October 7 combo/table-tennis changes do not establish a BTC straight-trade change. |
+
+At 100 contracts priced $0.50, the US calculation charges $1.74, before the
+other leg and additional costs. No zero-fee assumption was introduced.
+
+An explicitly conditional synthetic counterexample tests why endpoint precision
+matters: two alternative sixty-sample intervals can round to 100.01 and 99.99
+around an opening value of 100.00, making hypothetical Kalshi NO + US Up pay
+zero. This is **not** a claim about Kalshi's actual endpoint interpretation or an
+observed loss. Separate regressions cover benchmark rounding ties.
+
+### Implemented behavior
+
+- Typed, exact-decimal BTC policy and UTC 900-second quarter-hour windows.
+  Existing market payloads remain compatible; no database schema migration was
+  required for the new JSON fields.
+- Kalshi discovery uses `KXBTC15M`, shared series enumeration and effective fee
+  overrides. Measurement times come from explicit primary-rule timestamps,
+  checked against the close time; trading `open_time` is not substituted.
+  US discovery uses paginated crypto metadata and `assetPriceTerms`.
+  Its later `endDate` is not the measurement endpoint.
+- Matching requires equal asset, benchmark, actual endpoints, published opening
+  reference and Up/YES mapping. Known disagreements reject; missing evidence
+  remains review. Unknown all-scenario payout floors remain null, not an assumed
+  $1. Invalid identity cannot claim covered exceptional scenarios.
+- Public approvals still require independent, hash-bound review. Changes to the
+  opening reference, window or policy invalidate prior evidence. Annotation
+  cannot overwrite known source contingency policies.
+- BTC-only discovery refresh, current-window subscription priority, hash-change
+  resubscription and expired-match retirement are integrated with existing
+  workers. Sports refresh does not overwrite fast-loop BTC lifecycle ownership.
+- Both complementary directions use depth-adjusted asks, actual fee parameters,
+  additional-cost evidence, age/skew checks and existing risk limits. Window
+  availability is checked again at delayed paper/shadow fills. Public BTC shadow
+  qualification also requires operator execution-eligibility evidence.
+- The dashboard exposes BTC window/reference/policy evidence and a BTC
+  opportunity filter. Safe system configuration exposes the opt-in flag and
+  refresh interval, never credentials.
+
+### Sizing and persistence defects found while testing
+
+Actual fractional venue increments are preserved. Exhaustively sizing entries
+at 0.01 contracts had generated thousands of candidates per direction and
+blocked the first diagnostic harness's event loop. Strategy entry increments
+now default to **one contract**, separately configurable in risk Settings.
+Fractional fills, partial hedges and emergency unwinds still use actual venue
+increments. More than 10,000 candidate sizes rejects explicitly with
+`SIZING_GRID_TOO_LARGE`; incompatible increments reject with
+`QUANTITY_ROUNDING_MISMATCH`. There is no silent coarse-size fallback.
+Production diagnostic work already uses a thread; the private feed harness was
+corrected to do the same. A subsequent high-volume test exposed a separate
+reconstruction/backpressure problem. Kalshi now validates every sequenced delta
+in order, offloads reconstruction and coalesces depth publication on a 100-ms
+cadence instead of rebuilding full books for every message. This intentionally
+adds publication delay; original receipt/provider timestamps are preserved so
+age checks include it. Quiet final updates are flushed and lifecycle invalidation
+is immediate. Gaps still fail closed. The intermediate prototype's zero-quantity
+deletion handling was corrected and added to regression coverage.
+
+Testing also found that lexical whole-string timestamp ordering could discard
+a genuinely newer book when crossing from zero fractional seconds to a
+one-microsecond timestamp. Persistence now compares normalized UTC seconds and
+six-digit fractions. SQLite and real PostgreSQL regressions confirm that the
+newer update is retained, an older update is ignored and state survives restart.
+
+### Real market-data results and limitations
+
+Evidence files are retained outside the public repository. They contain public
+instrument/price observations, not authentication headers or account responses.
+Failed runs were retained, not overwritten.
+
+| Run | Observation | Interpretation |
+| --- | --- | --- |
+| First REST sample, 14:03 UTC | `KXBTC15M-26OCT051015-15` / `cpc-btc-updown-15m-2026-10-05-1400z`, shared opening 86409.81; US route returned 404 | Catalog presence did not establish consistent individual-route availability. |
+| Three REST samples, 14:13 UTC | Same pair; both book routes answered, but US provider age increased from about 3.2 to 16.6 seconds | Stale/empty executable inputs were rejected; the earlier 404 was not assumed permanent. |
+| First stream attempt, 14:17:41-14:19:29 UTC | 18,949 Kalshi and 109 US batches; both ultimately closed | Requested roughly 40 seconds but took 107 seconds under CPU-heavy synchronous sizing/reconstruction. This trace does not isolate their contributions or establish provider-feed unreliability. |
+| Corrected stream test, 14:29:17-14:29:57 UTC | `KXBTC15M-26OCT051030-30` / `cpc-btc-updown-15m-2026-10-05-1415z`, shared opening **86650.13**, actual 14:15-14:30 UTC window; **1,886 Kalshi and 77 US book batches**, no stream errors | Both subscriptions delivered data; explicit Kalshi acknowledgment and receipt events were recorded. Forty seconds is not continuous-uptime proof. |
+| Final three REST samples, 14:32 UTC | Next 14:30-14:45 window, shared opening **86279.12**; Kalshi asks changed from 0.15/0.86 to 0.17/0.84; US individual route returned 404 | Explicit missing-book diagnostics, not fabricated depth or a guessed alternate integration. |
+| Higher-volume retest, 14:45:09-14:46:29 UTC | 11,897 Kalshi / 117 US batches; both streams closed; sampling took 80 seconds | The earlier near-expiry success did not establish high-volume reliability. |
+| Ordered thread-only reconstruction, 14:53:20-14:54:00 UTC | 6,188 Kalshi / 390 US batches; Kalshi closed with local code 1011, no received close code | Keeping timers responsive alone did not remove full-depth reconstruction/backpressure. It was not treated as a proven provider outage. |
+| Intermediate coalescing prototype, 14:58 UTC | Stopped on validation of a legitimate zero-quantity level deletion | Prototype bug fixed; zero-level removal now has regression coverage. Failed artifact retained. |
+| Final coalesced test, 15:01:50-15:02:30 UTC | `KXBTC15M-26OCT051115-15` / `cpc-btc-updown-15m-2026-10-05-1500z`, shared opening **85605.89**, actual 15:00-15:15 window; **363 Kalshi / 385 US published book batches**, no stream errors | Every sampled direction had usable two-sided pricing; all 16 depth/fee calculations completed. Batches are coalesced publications, not raw-message counts. |
+
+At 14:45:07 UTC, a separate unauthenticated route trace of the previous
+14:30-14:45 US instrument returned HTTP 200 for individual metadata, book and
+BBO routes. This confirms inconsistent availability over time, not the precise
+cause of the earlier 404 responses.
+
+In the corrected near-expiry stream run, each direction lacked one required
+ask and had zero available complementary quantity. Kalshi book ages were
+56-168 ms; US ages were 144-1,933 ms, with six direction observations exceeding
+the existing inter-venue skew bound. There were **zero qualified directions**.
+No conditional profit calculation could overcome missing executable depth.
+Neither this short sample nor the REST route failures proves that all BTC
+windows lack liquidity or that the strategy is economically negative.
+
+The final early-window test removes that particular missing-depth ambiguity.
+Across eight samples, Kalshi book ages were 76-162 ms and US ages 125-243 ms.
+Both directions had current depth. Sixteen conditional 100-contract calculations
+were negative: **-$2.27 to -$6.47** after known venue fees and configured buffers,
+even with unresolved additional costs provisionally zero and an assumed $1
+combined payout. Fourteen direction observations had no gross spread at size;
+the two positive gross spreads were smaller than fees. No direction qualified.
+These are hypothetical acquisition calculations, not actual losses, and they
+establish an economically negative sampled window, not a universally negative
+BTC strategy.
+
+Additional-cost components and account trading permission were deliberately
+left unresolved in these read-only probes. A working authenticated data stream
+is not account permission; missing route evidence is not repaired by placing an
+order or weakening freshness checks. International Polymarket was not added to
+the US operator's executable universe.
+
+### Verification and operation
+
+The complete backend suite passed **182 tests**, including all five tests
+against a dedicated, migrated PostgreSQL 17 test database; no PostgreSQL tests
+were skipped in that run. Ruff and application mypy passed. BTC regressions
+cover discovery pagination, identity/reference changes, policy uncertainty,
+sampling/rounding, expiry, authenticated annotation restrictions, persisted
+paper hedging, explicit fractional sizing and delayed partial/rejected-second-leg
+stress with loss-recording bid-side unwinds.
+
+Frontend type checking, **14 unit tests**, formatting, lint and production build passed. Existing
+TanStack compiler and vendor annotation warnings remained nonfatal.
+Synthetic successes and injected losses are labeled simulation, not actual
+exchange executions or earnings.
+
+Operation is opt-in with `BTC_15M_ENABLED=true` and a 15-second default
+`BTC_DISCOVERY_INTERVAL_SECONDS`. Existing persisted risk settings must also
+include `BTC`; they are not silently rewritten. `entry_quantity_step` defaults
+to `"1"` and can explicitly request a supported fractional increment within the
+bounded grid. The credential-free probe command is documented in the README.
+
+**Decision:** the implementation can discover genuine overlaps, receive real
+books and exercise the paper pipeline, but public BTC contracts are still
+unapproved pending authoritative benchmark/exception evidence, account
+permission and complete applicable costs. Observe qualifying real-data shadow
+episodes only after those gates are satisfied. The new code remains local and
+undeployed; production configuration, live execution and collection clocks
+remain unchanged.
+
+## 29. Render diagnosis and profit-maximizing sizing (October 8, 2026)
+
+### Cloud root cause and financial boundary
+
+Read-only inspection of the four existing, repository-bound Render services
+found the shared `arb-postgres` instance **suspended**, with `suspenders: user`
+and its last update October 6 at 05:02 UTC. API and worker logs showed database
+hostname resolution failures. The API returned HTTP 502; its October 7 release
+failed predeploy. Background services marked `live` were not healthy agents.
+The cause was an unavailable shared dependency, not absent venue credentials
+or evidence of a trading edge.
+
+Resuming this existing basic-256mb instance would resume normal database billing.
+Approval was requested but the owner was unavailable. The database was **not**
+resumed, replaced, resized or exposed, and no other paid service was created.
+Cloud availability remains blocked on that explicit owner decision; local
+test results are not cloud acceptance.
+
+Worker initialization now retries transient DNS/connection errors using
+structured error classes rather than raw exception/credential output. Exhaustion
+still raises `DATABASE_OR_MIGRATIONS_UNAVAILABLE`. No healthy role lease is
+acquired before successful initialization, and failed startup disposes the pool.
+Build provenance prefers Render's actual `RENDER_GIT_COMMIT` over the obsolete
+manual `BUILD_VERSION`, retaining the latter as a non-Render fallback.
+
+### Next model improvement: maximize profit, not volume
+
+The previous size search retained the **last** size meeting price thresholds,
+which could buy deeper into less favorable prices and reduce total net profit
+while still passing minimum thresholds. Ordinary per-venue, total-notional,
+fixed-quantity-cap and bankroll modes now choose the greatest **qualifying net
+dollar profit** over the bounded, lot-valid grid. Equal-profit choices retain
+the smaller size/capital commitment. Explicit max-depth continues selecting the
+largest qualifying size; target-profit still stops at its first qualifying
+target. All existing budget, quantity, minimum-notional, fee, buffer and risk
+limits remain unchanged.
+
+When no size passes, the best modeled result is diagnostic only. It does not
+authorize a least-losing trade. The calculation records evaluated/qualifying
+size counts, the best modeled size/profit, largest evaluated size/profit and any
+early target stop. New calculations use `depth-decimal-v2`; old stored
+calculations remain readable without invented sizing evidence.
+
+A deterministic two-tier regression demonstrates the defect: the best modeled
+size is 100 contracts, while the still-profitable 200-contract size produces less
+net profit after walking deeper prices. Profit mode chooses 100; explicit
+max-depth chooses 200. Additional tests cover equal-profit capital ties,
+zero-profit rejection, target stopping and preservation of unknown-cost gates.
+
+Candidate diagnostics also expose a current-price **cost hurdle**: modeled fees,
+slippage, latency buffer and additional costs, plus the greater of the existing
+minimum dollar profit and return requirement. The dashboard reports required
+gross profit and its shortfall. This is **not a new executable quote** or a
+claim that fees would stay constant if prices improved. Unknown additional
+costs remain visibly incomplete; settlement and account permission still gate
+qualification separately. No maker-fee exemption, queue fill, funding route or
+provider permission was assumed.
+
+### Bounded real-data result
+
+On October 8, 05:16:41-05:17:21 UTC, authenticated market-data-only adapters
+observed `KXBTC15M-26OCT080130-30` and
+`cpc-btc-updown-15m-2026-10-08-0515z`. Both published opening reference
+**82700.52** for the actual 05:15-05:30 UTC window.
+
+Both streams stayed connected: **372 Kalshi and 377 US published book batches**,
+no stream errors. Sixteen directional calculations each examined 100 sizes.
+No size qualified. Best modeled one-contract results were negative, roughly
+**-$0.027 to -$0.078**; their 100-contract comparisons ranged roughly
+**-$2.23 to -$6.47**. The existing $1 net-profit requirement left positive
+shortfalls, and all additional-cost completeness flags remained false.
+These were conditional estimates, not positions, observed losses or proof about
+all future windows. No account/order/preview/transfer endpoint was called.
+
+A one-time, bounded read of the existing support conversations found no new
+authoritative compatibility or permission evidence. The new Kalshi message
+received October 7 at 01:28:03 UTC was an automated conversation-rating prompt.
+The earlier US routing acknowledgment remained nonauthoritative. No message was
+sent and the cancelled scheduled follow-up was not restarted.
+
+### Verification and release boundary
+
+The full backend suite passed **191 tests**, including all five tests on a
+dedicated migrated PostgreSQL 17 database. Ruff and application mypy passed.
+The frontend passed **15 unit tests**, types, lint and production build.
+The browser test additionally checks the actual sizing/cost-hurdle evidence
+panel, guarded paper controls and the existing authenticated workflow.
+
+The requested GitHub release includes the previously local gated BTC pipeline
+and this model/recovery work. Live trading remains unavailable. Restoring Render
+availability requires resuming the existing database with billing approval and
+then verifying migrations, readiness, actual-source worker leases and current
+feeds; a pushed commit or `live` service label alone is not a restored deployment.

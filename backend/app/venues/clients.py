@@ -15,6 +15,7 @@ from app.venues.schemas import (
     KalshiBook,
     KalshiPage,
     USBook,
+    USMarket,
     USPage,
 )
 
@@ -41,6 +42,7 @@ class KalshiClient:
 
     def __init__(self, http: PublicHTTP, settings: Settings) -> None:
         self.http = http
+        self.btc_enabled = settings.btc_15m_enabled
         self.fee_deadlines: dict[str, datetime] = {}
         self.base = (
             "https://external-api.kalshi.com/trade-api/v2"
@@ -87,14 +89,23 @@ class KalshiClient:
         return D("0.07") * multiplier
 
     async def discover(self, aliases: list[Alias]) -> AsyncIterator[Market]:
-        for league, ticker in KALSHI_SERIES.items():
-            series_data = await self.http.get(f"{self.base}/series/{ticker}")
-            series = series_data["series"]
-            cursor = ""
-            seen: set[str] = set()
-            rates: dict[str, D | None] = {}
-            while True:
-                data = await self.http.get(
+        series_universe = {**KALSHI_SERIES}
+        if self.btc_enabled:
+            series_universe["BTC"] = "KXBTC15M"
+        for league, ticker in series_universe.items():
+            async for market in self._discover_series(league, ticker, aliases):
+                yield market
+
+    async def _discover_series(
+        self, league: str, ticker: str, aliases: list[Alias]
+    ) -> AsyncIterator[Market]:
+        series = (await self.http.get(f"{self.base}/series/{ticker}"))["series"]
+        cursor = ""
+        seen: set[str] = set()
+        rates: dict[str, D | None] = {}
+        while True:
+            page = KalshiPage.model_validate(
+                await self.http.get(
                     f"{self.base}/markets",
                     {
                         "series_ticker": ticker,
@@ -104,23 +115,29 @@ class KalshiClient:
                         "mve_filter": "exclude",
                     },
                 )
-                page = KalshiPage.model_validate(data)
-                for wire in page.markets:
-                    if wire.event_ticker not in rates:
-                        rates[wire.event_ticker] = await self._event_rate(wire.event_ticker, series)
-                    market = kalshi_market(wire, league, series, rates[wire.event_ticker], aliases)
-                    deadline = self.fee_deadlines.get(wire.event_ticker)
-                    if deadline and market.fee.valid_until:
-                        market.fee.valid_until = min(market.fee.valid_until, deadline)
-                    yield market
-                cursor = page.cursor
-                if not cursor:
-                    break
-                if cursor in seen:
-                    raise VenueError("PAGINATION_LOOP")
-                seen.add(cursor)
+            )
+            for wire in page.markets:
+                if wire.event_ticker not in rates:
+                    rates[wire.event_ticker] = await self._event_rate(wire.event_ticker, series)
+                market = kalshi_market(wire, league, series, rates[wire.event_ticker], aliases)
+                deadline = self.fee_deadlines.get(wire.event_ticker)
+                if deadline and market.fee.valid_until:
+                    market.fee.valid_until = min(market.fee.valid_until, deadline)
+                yield market
+            cursor = page.cursor
+            if not cursor:
+                return
+            if cursor in seen:
+                raise VenueError("PAGINATION_LOOP")
+            seen.add(cursor)
+
+    async def discover_bitcoin(self) -> AsyncIterator[Market]:
+        async for market in self._discover_series("BTC", "KXBTC15M", []):
+            yield market
 
     async def get_orderbooks(self, market: Market) -> list[Book]:
+        if market.bitcoin and now() >= market.bitcoin.window_end:
+            raise VenueError("BTC_WINDOW_EXPIRED")
         current = await self.http.get(f"{self.base}/markets/{quote(market.external_id, safe='')}")
         state = current["market"]
         if state["status"] != "active":
@@ -129,6 +146,11 @@ class KalshiClient:
             f"{state.get('rules_primary', '')}\n{state.get('rules_secondary', '')}"
         ).strip()
         if current_rules != market.rules_text or state["title"] != market.title:
+            raise VenueError("MARKET_SPECIFICATION_CHANGED")
+        if market.bitcoin and any(
+            str(state.get(key)) != str(market.raw.get(key))
+            for key in ("open_time", "close_time", "floor_strike", "strike_type")
+        ):
             raise VenueError("MARKET_SPECIFICATION_CHANGED")
         requested_at = now()
         data = await self.http.get(
@@ -265,8 +287,9 @@ class InternationalClient:
 class USClient:
     venue = Venue.US
 
-    def __init__(self, http: PublicHTTP) -> None:
+    def __init__(self, http: PublicHTTP, settings: Settings | None = None) -> None:
         self.http = http
+        self.btc_enabled = settings is not None and settings.btc_15m_enabled
         self.base = "https://gateway.polymarket.us"
 
     async def discover(self, aliases: list[Alias]) -> AsyncIterator[Market]:
@@ -288,14 +311,62 @@ class USClient:
                 raise VenueError("PAGINATION_LOOP")
             seen.add(ids)
             for wire in page.markets:
+                if wire.assetPriceTerms and not self.btc_enabled:
+                    continue
                 market = us_market(wire, aliases)
-                if market.league in LEAGUES and market.market_type == "moneyline":
+                if (market.league in LEAGUES and market.market_type == "moneyline") or (
+                    self.btc_enabled and market.bitcoin is not None
+                ):
                     yield market
             if not page.markets:
                 return
             offset += len(page.markets)
 
+    async def discover_bitcoin(self) -> AsyncIterator[Market]:
+        offset = 0
+        seen: set[tuple[str, ...]] = set()
+        while True:
+            page = USPage.model_validate(
+                await self.http.get(
+                    f"{self.base}/v1/markets",
+                    {
+                        "categories": "crypto",
+                        "active": "true",
+                        "closed": "false",
+                        "limit": 100,
+                        "offset": offset,
+                    },
+                )
+            )
+            identifiers = tuple(m.id for m in page.markets)
+            if identifiers and identifiers in seen:
+                raise VenueError("PAGINATION_LOOP")
+            seen.add(identifiers)
+            for wire in page.markets:
+                terms = wire.assetPriceTerms
+                if (
+                    terms
+                    and terms.marketType == "ASSET_PRICE_MARKET_TYPE_UP_DOWN"
+                    and terms.horizon == "15m"
+                    and terms.asset.symbol.lower() == "btc"
+                ):
+                    yield us_market(wire, [])
+            if not page.markets:
+                return
+            offset += len(page.markets)
+
     async def get_orderbooks(self, market: Market) -> list[Book]:
+        if market.bitcoin:
+            if now() >= market.bitcoin.window_end:
+                raise VenueError("BTC_WINDOW_EXPIRED")
+            current = await self.http.get(
+                f"{self.base}/v1/market/slug/{quote(market.external_id, safe='')}"
+            )
+            observed = us_market(USMarket.model_validate(current["market"]), [])
+            if observed.public_spec_hash != market.public_spec_hash:
+                raise VenueError("MARKET_SPECIFICATION_CHANGED")
+            if not observed.tradable:
+                raise VenueError("MARKET_NOT_TRADABLE")
         requested_at = now()
         data = await self.http.get(
             f"{self.base}/v1/markets/{quote(market.external_id, safe='')}/book"

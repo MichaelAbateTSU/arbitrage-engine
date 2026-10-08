@@ -21,8 +21,15 @@ def test_invalid_financial_values(value):
 
 def test_us_fee_official_example():
     spec = FeeSpec(kind="us_quadratic", rate=D("0.0695"))
+    assert fee([Level(price=D("0.5"), quantity=D("100"))], spec) == D("1.74")
     assert fee([Level(price=D("0.65"), quantity=D("1000"))], spec) == D("15.81")
     assert fee([Level(price=D("0.5"), quantity=D("1000"))], spec) == D("17.38")
+
+
+@pytest.mark.parametrize("rate,expected", [("0.001", "0.02"), ("0.0014", "0.04")])
+def test_us_fee_rounds_exact_half_cents_to_even(rate, expected):
+    spec = FeeSpec(kind="us_quadratic", rate=D(rate))
+    assert fee([Level(price=D("0.50"), quantity=D("100"))], spec) == D(expected)
 
 
 def test_international_current_fee():
@@ -57,6 +64,54 @@ def test_depth_and_per_venue_caps(scenario):
     )
     assert calculation.quantity <= quantity(books[(a.id, Side.YES)].asks)
     assert calculation.net_profit < calculation.gross_profit
+
+
+def test_profit_sizing_does_not_keep_growing_after_marginal_profit_turns_negative(scenario):
+    a, b, books, _, risk = scenario
+    one, two = books[(a.id, Side.YES)], books[(b.id, Side.NO)]
+    for book in (one, two):
+        book.bids = []
+        book.asks = [
+            Level(price=D("0.35"), quantity=D("100")),
+            Level(price=D("0.49"), quantity=D("100")),
+        ]
+    a.fee = b.fee = FeeSpec(kind="kalshi_bound", rate=D("0.07"))
+    risk.max_contracts = 200
+    optimized = calculate(one, two, a, b, risk)
+    assert optimized.quantity == 100
+    assert optimized.binding_constraint == "NET_PROFIT_OPTIMUM"
+    assert optimized.sizing_analysis.largest_evaluated_quantity == 200
+    assert optimized.net_profit > optimized.sizing_analysis.largest_size_net_profit > 0
+    risk.sizing_mode = "max_depth"
+    volume = calculate(one, two, a, b, risk)
+    assert volume.quantity == 200 and volume.net_profit < optimized.net_profit
+    assert volume.sizing_analysis.objective == "largest_qualified"
+
+
+def test_profit_sizing_ties_keep_smaller_capital_and_never_qualify_zero_profit(scenario):
+    a, b, books, _, risk = scenario
+    one, two = books[(a.id, Side.YES)], books[(b.id, Side.NO)]
+    for book in (one, two):
+        book.asks = [Level(price=D("0.5"), quantity=D("100"))]
+    a.fee = b.fee = FeeSpec(kind="zero", rate=D("0"))
+    risk.slippage_bps = risk.latency_buffer_bps = risk.min_profit = risk.min_edge = D("0")
+    risk.additional_costs = {}
+    risk.max_contracts = 100
+    result = calculate(one, two, a, b, risk)
+    assert result.net_profit == 0
+    assert result.quantity < 100 and result.sizing_analysis.qualifying_sizes == 0
+    assert result.sizing_analysis.largest_evaluated_quantity == 100
+
+
+def test_profit_target_still_stops_at_first_qualifying_size(scenario):
+    a, b, books, _, risk = scenario
+    risk.sizing_mode = "target_profit"
+    risk.target_profit = D("5")
+    result = calculate(books[(a.id, Side.YES)], books[(b.id, Side.NO)], a, b, risk)
+    assert result.net_profit >= risk.target_profit
+    assert result.binding_constraint == "TARGET_PROFIT"
+    assert result.sizing_analysis.target_stopped_search
+    assert result.sizing_analysis.largest_evaluated_quantity == result.quantity
 
 
 @pytest.mark.parametrize(

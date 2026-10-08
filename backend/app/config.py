@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, ValidationError, model_validator
+from pydantic import AliasChoices, Field, SecretStr, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +23,10 @@ class Settings(BaseSettings):
         "http://localhost:5173,http://localhost:8000,http://127.0.0.1:5173,http://127.0.0.1:8000"
     )
     public_read_enabled: bool = False
-    build_version: str = "development"
+    build_version: str = Field(
+        default="development",
+        validation_alias=AliasChoices("RENDER_GIT_COMMIT", "BUILD_VERSION", "build_version"),
+    )
     operator_country: str = "US"
     operator_region: str = "GA"
     validation_interval_seconds: int = 10
@@ -33,6 +36,8 @@ class Settings(BaseSettings):
     polymarket_us_key_id: SecretStr | None = None
     polymarket_us_secret_key: SecretStr | None = None
     discovery_interval_seconds: int = 300
+    btc_15m_enabled: bool = False
+    btc_discovery_interval_seconds: int = 15
     book_poll_seconds: int = 2
     max_monitored_markets: int = 80
     request_rate: int = 5
@@ -63,6 +68,7 @@ class Settings(BaseSettings):
         if (
             min(
                 self.discovery_interval_seconds,
+                self.btc_discovery_interval_seconds,
                 self.book_poll_seconds,
                 self.max_monitored_markets,
                 self.request_rate,
@@ -75,6 +81,8 @@ class Settings(BaseSettings):
             raise ValueError("Intervals, budgets and retention must be positive")
         if self.request_rate > 10 or self.max_monitored_markets > 500:
             raise ValueError("Request budget or monitored universe exceeds supported limits")
+        if self.btc_discovery_interval_seconds < 2:
+            raise ValueError("Bitcoin reference discovery must not poll faster than two seconds")
         return self
 
     @property

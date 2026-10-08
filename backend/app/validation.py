@@ -73,6 +73,19 @@ class ValidationSettings(Model):
         return self
 
 
+class ExecutionEconomics(Model):
+    cost_hurdle: D
+    required_net_profit: D
+    required_gross_profit: D
+    gross_profit_shortfall: D
+    required_gross_spread_per_contract: D
+    cost_evidence_complete: bool
+    basis: str = (
+        "At the observed executable prices and size; changing quotes changes fees. "
+        "This is not a new quote, a fill or an all-scenario payout guarantee."
+    )
+
+
 class CandidateValidation(Model):
     id: str
     match_id: str
@@ -105,6 +118,7 @@ class CandidateValidation(Model):
     source: Literal["demo", "public"]
     settlement_adjusted_net_profit: D | None = None
     known_scenario_net_floor: D | None = None
+    execution_economics: ExecutionEconomics | None = None
 
 
 def diagnose(
@@ -120,6 +134,8 @@ def diagnose(
     current = match_markets(a, b, match.human_reviewed)
     proof = settlement_proof(a, b)
     common = []
+    common += a.entry_reasons(instant, risk.latency_ms)
+    common += b.entry_reasons(instant, risk.latency_ms)
     if match.status != "approved" or current.status != "approved":
         common += ["MARKET_MATCH_UNAPPROVED", *match.reasons, *current.reasons]
     if [match.first_rules_hash, match.second_rules_hash] != [a.rules_hash, b.rules_hash]:
@@ -161,6 +177,7 @@ def diagnose(
         one, two = books.get((a.id, side)), books.get((b.id, other))
         reasons = list(common)
         calc = None
+        size_error = False
         available = D("0")
         if one is None or two is None:
             reasons.append("MISSING_BOOK")
@@ -177,10 +194,13 @@ def diagnose(
                 try:
                     calc = calculate(one, two, a, b, risk)
                 except ValueError as exc:
-                    if str(exc) != "QUANTITY_ROUNDING_MISMATCH":
+                    if str(exc) not in ("QUANTITY_ROUNDING_MISMATCH", "SIZING_GRID_TOO_LARGE"):
                         raise
-                    reasons.append("QUANTITY_ROUNDING_MISMATCH")
-            if (known_fees and not book_failures and calc is None) or available <= 0:
+                    size_error = True
+                    reasons.append(str(exc))
+            if (
+                known_fees and not book_failures and calc is None and not size_error
+            ) or available <= 0:
                 reasons.append("INSUFFICIENT_DEPTH_OR_CAPITAL")
         execution = list(dict.fromkeys(eligibility[a.venue].reasons + eligibility[b.venue].reasons))
         if any(not eligibility[venue].open_order_eligible for venue in (a.venue, b.venue)):
@@ -228,7 +248,33 @@ def diagnose(
                 balance = eligibility[market.venue].available_balance
                 if balance is not None and balance < leg_cost:
                     execution.append(f"INSUFFICIENT_BALANCE_{market.venue.upper()}")
+        economics = None
+        if calc:
+            hurdle = (
+                calc.fee_one
+                + calc.fee_two
+                + calc.slippage
+                + calc.safety_buffer
+                + calc.additional_cost_one
+                + calc.additional_cost_two
+            )
+            required_net = max(risk.min_profit, risk.min_edge * (calc.cost_one + calc.cost_two))
+            required_gross = hurdle + required_net
+            economics = ExecutionEconomics(
+                cost_hurdle=hurdle,
+                required_net_profit=required_net,
+                required_gross_profit=required_gross,
+                gross_profit_shortfall=max(D("0"), required_gross - calc.gross_profit),
+                required_gross_spread_per_contract=required_gross / calc.quantity,
+                cost_evidence_complete=a.source == "demo"
+                or all(
+                    risk.additional_costs.get(m.venue, AdditionalCosts()).known_at(instant)
+                    for m in (a, b)
+                ),
+            )
         shadow_reasons = list(reasons)
+        if a.bitcoin and a.source == "public" and execution:
+            shadow_reasons += execution
         if b.venue == Venue.INTERNATIONAL and (
             eligibility[b.venue].jurisdiction_status == "close_only"
         ):
@@ -241,7 +287,7 @@ def diagnose(
                 id=fingerprint([match.id, side, a.source])[:32],
                 match_id=match.id,
                 event_id=match.event_id,
-                event=" vs ".join(a.participants),
+                event=a.event_label,
                 league=a.league,
                 second_venue=b.venue,
                 first_market_id=a.id,
@@ -288,6 +334,7 @@ def diagnose(
                 source=a.source,
                 settlement_adjusted_net_profit=adjusted,
                 known_scenario_net_floor=known_net,
+                execution_economics=economics,
             )
         )
     return results

@@ -104,6 +104,65 @@ class FeeSpec(Model):
         )
 
 
+class BitcoinPolicy(Model):
+    sample_start_offset: int | None = Field(default=None, ge=-120, le=0)
+    sample_end_offset: int | None = Field(default=None, ge=-120, le=0)
+    rounding_mode: Literal["half_even", "half_up"] | None = None
+    revision_deadline_seconds: int | None = Field(default=None, ge=0)
+    missing_data: Literal["no", "half_refund", "deferred_review"] | None = None
+    discretionary_settlement: Literal["excluded", "independent"] | None = None
+    evidence: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def documented(self) -> "BitcoinPolicy":
+        if (self.sample_start_offset is None) != (self.sample_end_offset is None):
+            raise ValueError("Both sample endpoints are required")
+        if self.sample_start_offset is not None and self.sample_end_offset is not None:
+            if self.sample_end_offset - self.sample_start_offset != 59:
+                raise ValueError("Bitcoin settlement requires exactly sixty one-second samples")
+        for name in type(self).model_fields:
+            if name != "evidence" and getattr(self, name) is not None:
+                if not self.evidence.get(name, "").strip():
+                    raise ValueError(f"Bitcoin policy requires source evidence: {name}")
+        return self
+
+
+class BitcoinWindow(Model):
+    asset: Literal["BTC"] = "BTC"
+    benchmark: Literal["BRTI"] = "BRTI"
+    window_start: datetime
+    window_end: datetime
+    opening_reference: Positive | None = None
+    policy: BitcoinPolicy = Field(default_factory=BitcoinPolicy)
+
+    @field_validator("opening_reference", mode="before")
+    @classmethod
+    def exact_reference(cls, value: Any) -> Any:
+        if isinstance(value, (float, bool)):
+            raise ValueError("Bitcoin reference must be an exact decimal")
+        return value
+
+    @field_validator("window_start", "window_end")
+    @classmethod
+    def utc_window(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("Bitcoin windows require timezone-aware timestamps")
+        return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def exact_window(self) -> "BitcoinWindow":
+        if self.window_start.tzinfo is None or self.window_end.tzinfo is None:
+            raise ValueError("Bitcoin windows require timezone-aware timestamps")
+        if (self.window_end - self.window_start).total_seconds() != 900:
+            raise ValueError("Bitcoin window must be exactly fifteen minutes")
+        if any(
+            value.second or value.microsecond or value.minute % 15
+            for value in (self.window_start, self.window_end)
+        ):
+            raise ValueError("Bitcoin window must align to quarter-hour boundaries")
+        return self
+
+
 class Market(Model):
     id: str
     venue: Venue
@@ -132,6 +191,7 @@ class Market(Model):
     raw: dict[str, Any] = Field(default_factory=dict)
     discovered_at: datetime = Field(default_factory=now)
     result: Price | None = None
+    bitcoin: BitcoinWindow | None = None
 
     @field_validator("start_time", "discovered_at")
     @classmethod
@@ -143,8 +203,40 @@ class Market(Model):
     @property
     def public_spec_hash(self) -> str:
         sides = self.raw.get("marketSides") or []
+        bitcoin_spec = (
+            {
+                "bitcoin_identity": self.bitcoin.model_dump(exclude={"policy"}, mode="json"),
+                "bitcoin_source_policy": self.raw.get("bitcoin_source_policy"),
+                "bitcoin_governing_terms": self.raw.get("bitcoin_governing_terms"),
+                "bitcoin_wire_terms": {
+                    key: self.raw.get(key)
+                    for key in (
+                        "open_time",
+                        "close_time",
+                        "floor_strike",
+                        "strike_type",
+                        "notional_value_dollars",
+                    )
+                },
+                "bitcoin_asset_terms": {
+                    key: (self.raw.get("assetPriceTerms") or {}).get(key)
+                    for key in (
+                        "marketType",
+                        "asset",
+                        "indexSymbol",
+                        "horizon",
+                        "windowStart",
+                        "windowEnd",
+                        "priceToBeat",
+                    )
+                },
+            }
+            if self.bitcoin is not None
+            else {}
+        )
         return fingerprint(
             {
+                **bitcoin_spec,
                 "venue": self.venue,
                 "external_id": self.external_id,
                 "raw_external_id": self.raw.get("ticker" if self.venue == Venue.KALSHI else "slug"),
@@ -166,6 +258,7 @@ class Market(Model):
     def rules_hash(self) -> str:
         return fingerprint(
             {
+                **({"bitcoin": self.bitcoin.model_dump(mode="json")} if self.bitcoin else {}),
                 "raw": self.rules_text,
                 "source_specification": self.public_spec_hash,
                 "quote_currency": self.quote_currency,
@@ -178,6 +271,29 @@ class Market(Model):
                 "league": self.league,
             }
         )
+
+    def entry_reasons(self, instant: datetime, latency_ms: int = 0) -> list[str]:
+        if self.market_type != "btc_up_down_15m":
+            return []
+        if self.bitcoin is None:
+            return ["BTC_WINDOW_IDENTITY_MISSING"]
+        reasons = []
+        if instant < self.bitcoin.window_start:
+            reasons.append("BTC_WINDOW_NOT_STARTED")
+        if (self.bitcoin.window_end - instant).total_seconds() * 1000 <= latency_ms:
+            reasons.append("BTC_WINDOW_EXPIRED_OR_TOO_SHORT")
+        if self.bitcoin.opening_reference is None:
+            reasons.append("BTC_OPENING_REFERENCE_UNAVAILABLE")
+        return reasons
+
+    @property
+    def event_label(self) -> str:
+        if self.bitcoin:
+            return (
+                f"BTC 15m {self.bitcoin.window_start.astimezone(UTC).isoformat()} "
+                f"to {self.bitcoin.window_end.astimezone(UTC).isoformat()}"
+            )
+        return " vs ".join(self.participants)
 
     def valid_price(self, price: Decimal, side: Side = Side.YES) -> bool:
         quote = price if side == Side.YES else D("1") - price
@@ -382,6 +498,7 @@ class RiskSettings(Model):
         "per_venue", "total_notional", "fixed_quantity", "max_depth", "target_profit", "bankroll"
     ] = "per_venue"
     fixed_quantity: Positive = D("100")
+    entry_quantity_step: Positive = D("1")
     target_profit: Positive = D("10")
     bankroll_fraction: Annotated[Decimal, Field(gt=0, le=1)] = D("0.1")
     kill_switch: bool = True
@@ -407,6 +524,17 @@ class RiskSettings(Model):
         return self
 
 
+class SizingAnalysis(Model):
+    objective: Literal["max_net_profit", "largest_qualified", "target_profit"]
+    evaluated_sizes: int = Field(ge=1)
+    qualifying_sizes: int = Field(ge=0)
+    best_net_quantity: Positive
+    best_net_profit: Decimal
+    largest_evaluated_quantity: Positive
+    largest_size_net_profit: Decimal
+    target_stopped_search: bool = False
+
+
 class Calculation(Model):
     quantity: Positive
     cost_one: Amount
@@ -430,7 +558,8 @@ class Calculation(Model):
     binding_constraint: str
     consumed_one: list[Level]
     consumed_two: list[Level]
-    version: str = "depth-decimal-v1"
+    sizing_analysis: SizingAnalysis | None = None
+    version: str = "depth-decimal-v2"
 
 
 class Opportunity(Model):

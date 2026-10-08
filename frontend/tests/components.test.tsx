@@ -8,12 +8,70 @@ import {
   eligibilitySchema,
   opportunitySchema,
   riskSchema,
+  marketSchema,
 } from "../src/schemas";
 import { money, percent, time } from "../src/api";
-import { SettlementMatrix } from "../src/Validation";
+import { ProfitabilityEvidence, SettlementMatrix } from "../src/Validation";
 import { FocusedEvidence } from "../src/FocusedEvidence";
 
 describe("fail-closed client schemas", () => {
+  it("preserves exact Bitcoin references and unresolved settlement policy", () => {
+    const value = {
+      id: "kalshi:BTC-fixture",
+      venue: "kalshi",
+      external_id: "BTC-fixture",
+      title: "Synthetic BTC",
+      rules_text: "Synthetic rules",
+      league: "BTC",
+      sport: "crypto",
+      participants: ["up", "down"],
+      yes_team: "up",
+      start_time: "2030-01-01T14:00:00Z",
+      status: "open",
+      source: "demo",
+      rules: {
+        period: "15m",
+        overtime: null,
+        draw: null,
+        cancellation: null,
+        postponement: null,
+        settlement_source: "BRTI",
+        payout: "1",
+        evidence: {},
+      },
+      bitcoin: {
+        asset: "BTC",
+        benchmark: "BRTI",
+        window_start: "2030-01-01T14:00:00Z",
+        window_end: "2030-01-01T14:15:00Z",
+        opening_reference: "85000.00",
+        policy: {
+          sample_start_offset: null,
+          sample_end_offset: null,
+          rounding_mode: null,
+          revision_deadline_seconds: null,
+          missing_data: "no",
+          discretionary_settlement: "independent",
+          evidence: { missing_data: "Synthetic" },
+        },
+      },
+    };
+    expect(marketSchema.parse(value).bitcoin?.opening_reference).toBe(
+      "85000.00",
+    );
+    expect(
+      marketSchema.safeParse({
+        ...value,
+        bitcoin: { ...value.bitcoin, opening_reference: 85000 },
+      }).success,
+    ).toBe(false);
+    expect(
+      marketSchema.safeParse({
+        ...value,
+        bitcoin: { ...value.bitcoin, opening_reference: null },
+      }).success,
+    ).toBe(true);
+  });
   it("rejects floating point financial responses", () => {
     expect(decimal.safeParse(0.5).success).toBe(false);
     expect(decimal.safeParse("0.50").success).toBe(true);
@@ -25,6 +83,13 @@ describe("fail-closed client schemas", () => {
   });
   it("rejects an empty supported universe", () => {
     expect(riskSchema.safeParse({ supported_leagues: [] }).success).toBe(false);
+  });
+  it("keeps entry sizing distinct and exact with backward-compatible defaults", () => {
+    expect(riskSchema.shape.entry_quantity_step.parse(undefined)).toBe("1");
+    expect(riskSchema.shape.entry_quantity_step.parse("0.01")).toBe("0.01");
+    expect(riskSchema.shape.entry_quantity_step.safeParse(0.01).success).toBe(
+      false,
+    );
   });
   it("rejects invalid eligibility, float buying power and enabled live execution", () => {
     const value = {
@@ -61,6 +126,38 @@ describe("fail-closed client schemas", () => {
   });
 });
 describe("dashboard evidence and states", () => {
+  it("shows conditional size economics without claiming missing costs are verified", () => {
+    render(
+      <ProfitabilityEvidence
+        sizing={{
+          objective: "max_net_profit",
+          evaluated_sizes: 200,
+          qualifying_sizes: 190,
+          best_net_quantity: "100",
+          best_net_profit: "26.625",
+          largest_evaluated_quantity: "200",
+          largest_size_net_profit: "24.88",
+          target_stopped_search: false,
+        }}
+        economics={{
+          cost_hurdle: "3.375",
+          required_net_profit: "1",
+          required_gross_profit: "4.375",
+          gross_profit_shortfall: "0",
+          required_gross_spread_per_contract: "0.04375",
+          cost_evidence_complete: false,
+          basis: "At observed prices, not a fill.",
+        }}
+      />,
+    );
+    expect(screen.getByText(/Best modeled size: 100 contracts/)).toBeVisible();
+    expect(
+      screen.getByText(/Additional costs remain unverified/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/do not establish settlement coverage/),
+    ).toBeVisible();
+  });
   it("shows zero without presenting null as a profit", () => {
     expect(money("0")).toBe("$0.00");
     expect(money(null)).toBe("\u2014");

@@ -229,12 +229,15 @@ def choose_focus(
         if match.id not in scope:
             continue
         a, b = markets[match.first_market_id], markets[match.second_market_id]
+        if a.entry_reasons(now()) or b.entry_reasons(now()):
+            continue
         if not (a.tradable and b.tradable and a.status == b.status == "open"):
             continue
         groups.setdefault(family_ids[match.id], []).append(match)
     for values in groups.values():
         values.sort(
             key=lambda match: (
+                markets[match.first_market_id].bitcoin is None,
                 match.id not in previous,
                 -sum(
                     (

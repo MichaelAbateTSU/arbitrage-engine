@@ -33,6 +33,7 @@ from app.db import (
     WorkerRow,
 )
 from app.domain import (
+    BitcoinPolicy,
     Market,
     Match,
     Model,
@@ -75,6 +76,7 @@ class Annotation(Model):
     rules: Rules
     evidence: dict[str, str]
     note: str
+    bitcoin_policy: BitcoinPolicy | None = None
 
     @field_validator("start_time")
     @classmethod
@@ -198,7 +200,7 @@ async def annotate_market(
             raise HTTPException(409, "MARKET_SPECIFICATION_CHANGED")
         if len(set(body.participants)) != 2 or body.yes_team not in body.participants:
             raise HTTPException(422, "INVALID_PARTICIPANTS")
-        if body.rules.unknowns:
+        if body.rules.unknowns and market.bitcoin is None:
             raise HTTPException(422, "REQUIRED_RULE_FIELDS_UNKNOWN")
         required = [
             "participants",
@@ -211,6 +213,26 @@ async def annotate_market(
             "postponement",
             "settlement_source",
         ]
+        if market.bitcoin is not None:
+            required = ["participants", "yes_team", "start_time"]
+            if (
+                body.participants != market.participants
+                or body.yes_team != market.yes_team
+                or body.start_time != market.bitcoin.window_start
+                or body.bitcoin_policy is None
+                or not body.note.strip()
+            ):
+                raise HTTPException(422, "BTC_IDENTITY_IMMUTABLE_AND_POLICY_EVIDENCE_REQUIRED")
+            published = market.raw.get("bitcoin_source_policy") or {}
+            for field in BitcoinPolicy.model_fields:
+                if field == "evidence":
+                    continue
+                if published.get(field) is not None and (
+                    getattr(body.bitcoin_policy, field) != published[field]
+                ):
+                    raise HTTPException(422, "BTC_POLICY_CONTRADICTS_PUBLISHED_TERMS")
+        elif body.bitcoin_policy is not None:
+            raise HTTPException(422, "BTC_POLICY_REQUIRES_BITCOIN_MARKET")
         if any(not body.evidence.get(field, "").strip() for field in required):
             raise HTTPException(422, "RULE_EVIDENCE_REQUIRED")
         at = body.start_time
@@ -221,6 +243,11 @@ async def annotate_market(
             "start_time_verified": True,
             "rules": {**body.rules.model_dump(mode="json"), "evidence": body.evidence},
         }
+        if market.bitcoin is not None:
+            fields["rules"] = market.rules.model_dump(mode="json")
+            fields["bitcoin"] = market.bitcoin.model_copy(
+                update={"policy": body.bitcoin_policy}
+            ).model_dump(mode="json")
         changed = Market.model_validate({**market.model_dump(mode="json"), **fields})
         await upsert(
             session,
@@ -294,7 +321,7 @@ async def matches(
 
 @router.get("/matches/{identifier}")
 async def match_detail(request: Request, identifier: str) -> dict[str, Any]:
-    from app.validation import settlement_proof
+    from app.settlement import settlement_proof
 
     store: Store = request.app.state.store
     match = Match.model_validate(await get_payload(store, MatchRow, identifier))
@@ -343,7 +370,7 @@ async def review_match(
                 422, {"code": "DETERMINISTIC_GATES_FAILED", "reasons": match.reasons}
             )
         if action == "approve":
-            from app.validation import settlement_proof
+            from app.settlement import settlement_proof
 
             proof = settlement_proof(a, b)
             if (
@@ -663,6 +690,8 @@ async def configuration(request: Request) -> dict[str, Any]:
         "redis_configured": bool(settings.redis_url),
         "admin_configured": bool(settings.admin_password_hash),
         "max_monitored_markets_per_venue": settings.max_monitored_markets,
+        "btc_15m_enabled": settings.btc_15m_enabled,
+        "btc_discovery_interval_seconds": settings.btc_discovery_interval_seconds,
     }
 
 

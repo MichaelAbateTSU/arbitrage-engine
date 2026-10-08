@@ -65,6 +65,44 @@ def test_unapproved_but_usable_books_still_receive_depth_pricing(scenario):
     assert "MARKET_MATCH_UNAPPROVED" in result.reasons
 
 
+def test_cost_hurdle_includes_thresholds_without_fabricating_a_new_quote(scenario):
+    a, b, books, match, risk = scenario
+    result = diagnose(match, a, b, books, risk, profiles(), now(), Exposure())[0]
+    calc, economics = result.calculation, result.execution_economics
+    hurdle = (
+        calc.fee_one
+        + calc.fee_two
+        + calc.slippage
+        + calc.safety_buffer
+        + calc.additional_cost_one
+        + calc.additional_cost_two
+    )
+    assert economics.cost_hurdle == hurdle
+    assert economics.required_net_profit == max(
+        risk.min_profit, risk.min_edge * (calc.cost_one + calc.cost_two)
+    )
+    assert economics.required_gross_profit == hurdle + economics.required_net_profit
+    assert economics.gross_profit_shortfall == max(
+        D("0"), economics.required_gross_profit - calc.gross_profit
+    )
+    assert economics.required_gross_spread_per_contract == (
+        economics.required_gross_profit / calc.quantity
+    )
+    assert not result.executable_for_operator
+
+
+def test_unknown_public_costs_do_not_become_verified_by_the_cost_hurdle(scenario):
+    a, b, books, match, risk = scenario
+    a.source = b.source = "public"
+    for book in books.values():
+        book.source = "public"
+    result = diagnose(match, a, b, books, risk, profiles(), now(), Exposure())[0]
+    assert result.execution_economics is not None
+    assert not result.execution_economics.cost_evidence_complete
+    assert "ADDITIONAL_COSTS_UNVERIFIED" in result.reasons
+    assert not result.shadow_qualified and not result.executable_for_operator
+
+
 @pytest.mark.parametrize("failure", ["stale", "unsynchronized", "disconnected", "skew"])
 def test_unusable_books_do_not_run_size_search_or_invent_capital_failure(
     scenario, monkeypatch, failure

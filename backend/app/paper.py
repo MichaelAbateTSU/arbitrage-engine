@@ -77,6 +77,10 @@ def evaluate_paper(
         transition(trade, PaperState.CANCELLED, instant)
         trade.failure_reason = "KILL_SWITCH_ACTIVE"
         return True
+    if a.entry_reasons(instant) or b.entry_reasons(instant):
+        transition(trade, PaperState.EXPIRED, instant)
+        trade.failure_reason = "BTC_WINDOW_UNAVAILABLE_AT_FILL"
+        return True
     from app.domain import Match
 
     match = Match.model_validate(opportunity.inputs["match"])

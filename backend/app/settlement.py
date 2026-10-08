@@ -9,6 +9,10 @@ SCREEN_VERSION = "scenario-bounds-v1"
 
 
 def rule_profile(market: Market) -> dict[str, Any]:
+    if market.market_type == "btc_up_down_15m":
+        from app.bitcoin import bitcoin_profile
+
+        return bitcoin_profile(market)
     text = normalized(market.rules_text)
     windows = {
         "within_48h": ("within 48 hours",),
@@ -49,6 +53,10 @@ def rule_profile(market: Market) -> dict[str, Any]:
 
 
 def settlement_proof(a: Market, b: Market) -> dict[str, Any]:
+    if a.market_type == "btc_up_down_15m" or b.market_type == "btc_up_down_15m":
+        from app.bitcoin import bitcoin_proof
+
+        return bitcoin_proof(a, b)
     verified = match_markets(a, b, human_reviewed=True)
     profiles = [rule_profile(a), rule_profile(b)]
     scenarios: list[dict[str, Any]] = []

@@ -55,6 +55,29 @@ export const marketSchema = z
     rules: rulesSchema,
     status: z.string(),
     source,
+    bitcoin: z
+      .object({
+        asset: z.literal("BTC"),
+        benchmark: z.literal("BRTI"),
+        window_start: timestamp,
+        window_end: timestamp,
+        opening_reference: decimal.nullable(),
+        policy: z.object({
+          sample_start_offset: z.number().int().nullable(),
+          sample_end_offset: z.number().int().nullable(),
+          rounding_mode: z.enum(["half_even", "half_up"]).nullable(),
+          revision_deadline_seconds: z.number().int().nonnegative().nullable(),
+          missing_data: z
+            .enum(["no", "half_refund", "deferred_review"])
+            .nullable(),
+          discretionary_settlement: z
+            .enum(["excluded", "independent"])
+            .nullable(),
+          evidence: z.record(z.string(), z.string()),
+        }),
+      })
+      .nullable()
+      .optional(),
   })
   .passthrough();
 export const matchSchema = z
@@ -81,6 +104,25 @@ export const matchDetailSchema = matchSchema.extend({
       .passthrough(),
   ),
 });
+export const sizingAnalysisSchema = z.object({
+  objective: z.enum(["max_net_profit", "largest_qualified", "target_profit"]),
+  evaluated_sizes: z.number().int().positive(),
+  qualifying_sizes: z.number().int().nonnegative(),
+  best_net_quantity: decimal,
+  best_net_profit: decimal,
+  largest_evaluated_quantity: decimal,
+  largest_size_net_profit: decimal,
+  target_stopped_search: z.boolean(),
+});
+export const executionEconomicsSchema = z.object({
+  cost_hurdle: decimal,
+  required_net_profit: decimal,
+  required_gross_profit: decimal,
+  gross_profit_shortfall: decimal,
+  required_gross_spread_per_contract: decimal,
+  cost_evidence_complete: z.boolean(),
+  basis: z.string(),
+});
 export const calculationSchema = z.object({
   quantity: decimal,
   cost_one: decimal,
@@ -105,6 +147,7 @@ export const calculationSchema = z.object({
   consumed_one: z.array(level),
   consumed_two: z.array(level),
   version: z.string(),
+  sizing_analysis: sizingAnalysisSchema.nullable().optional(),
 });
 export const opportunitySchema = z.object({
   id: z.string(),
@@ -221,6 +264,7 @@ export const riskSchema = z
     supported_leagues: z.array(z.string()).min(1),
     fill_model: z.enum(["conservative", "optimistic", "observed"]),
     sizing_mode: z.string(),
+    entry_quantity_step: decimal.default("1"),
   })
   .passthrough();
 export const riskResponseSchema = z.object({
@@ -267,6 +311,8 @@ export const configSchema = z
     kalshi_websocket_configured: z.boolean(),
     polymarket_us_websocket_configured: z.boolean(),
     max_monitored_markets_per_venue: z.number(),
+    btc_15m_enabled: z.boolean().default(false),
+    btc_discovery_interval_seconds: z.number().default(15),
   })
   .passthrough();
 export const sessionSchema = z
@@ -383,6 +429,7 @@ export const candidateSchema = z
     first_book_age_ms: z.number().nullable(),
     second_book_age_ms: z.number().nullable(),
     calculation: calculationSchema.nullable(),
+    execution_economics: executionEconomicsSchema.nullable().optional(),
     settlement_proof: z
       .object({
         proven: z.boolean(),

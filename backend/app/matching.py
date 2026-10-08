@@ -102,6 +102,10 @@ def extract_rules(text: str, source: str | None = None) -> Rules:
 
 
 def event_identity(market: Market) -> str:
+    if market.bitcoin is not None:
+        from app.bitcoin import bitcoin_event_identity
+
+        return bitcoin_event_identity(market)
     return fingerprint(
         {
             "league": market.league,
@@ -112,6 +116,10 @@ def event_identity(market: Market) -> str:
 
 
 def match_markets(first: Market, second: Market, human_reviewed: bool = False) -> Match:
+    if first.market_type == "btc_up_down_15m" or second.market_type == "btc_up_down_15m":
+        from app.bitcoin import bitcoin_match
+
+        return bitcoin_match(first, second, human_reviewed)
     reasons: list[str] = []
     unknown: list[str] = []
     checks: dict[str, Any] = {}
