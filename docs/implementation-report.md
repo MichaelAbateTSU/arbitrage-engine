@@ -1291,6 +1291,10 @@ dedicated migrated PostgreSQL 17 database. Ruff and application mypy passed.
 The frontend passed **15 unit tests**, types, lint and production build.
 The browser test additionally checks the actual sizing/cost-hurdle evidence
 panel, guarded paper controls and the existing authenticated workflow.
+Linux CI also exposed a hovered-row contrast defect in the directional labels:
+the former 4.22:1 contrast did not meet 4.5:1 for small text. The label color was
+adjusted to 5.43:1 on that background, and the browser audit now explicitly
+hovers the row instead of depending on incidental pointer position.
 
 The requested GitHub release includes the previously local gated BTC pipeline
 and this model/recovery work. Live trading remains unavailable. Restoring Render

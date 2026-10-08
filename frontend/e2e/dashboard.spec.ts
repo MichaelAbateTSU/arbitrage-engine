@@ -75,6 +75,10 @@ test("demo dashboard, guarded paper lifecycle and validation phase", async ({
     .click();
   await expect(page.getByLabel("kalshi funding status")).toHaveValue("unknown");
   await expect(page.getByLabel("kalshi funding amount")).toBeDisabled();
+  await page
+    .getByRole("button", { name: /Kalshi YES.*polymarket_us NO/ })
+    .first()
+    .hover();
   expect(
     (
       await new AxeBuilder({ page })
