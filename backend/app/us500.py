@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from datetime import datetime
-from decimal import ROUND_CEILING, Decimal, InvalidOperation
+from decimal import ROUND_CEILING, Decimal
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -15,23 +15,12 @@ from pydantic import (
 )
 
 from app.domain import D, Model
+from app.domain import exact_decimal as exact
 from app.pricing import cost, depth_slices, quantity
 
 TICKER: Literal["KXUS500PERP"] = "KXUS500PERP"
 FILING_URL = "https://www.cftc.gov/filings/ptc/ptc08182617972.pdf"
 FILING_SHA256 = "81d77bf2996bada00a37dedd2748e37641fb0c2c5fa11c16bec6a17fa9934be6"
-
-
-def exact(value: Any) -> Decimal:
-    if isinstance(value, (float, bool)) or not isinstance(value, (str, int, Decimal)):
-        raise ValueError("EXACT_DECIMAL_REQUIRED")
-    try:
-        result = D(value)
-    except InvalidOperation as exc:
-        raise ValueError("EXACT_DECIMAL_REQUIRED") from exc
-    if not result.is_finite():
-        raise ValueError("FINITE_DECIMAL_REQUIRED")
-    return result
 
 
 Exact = Annotated[Decimal, BeforeValidator(exact)]

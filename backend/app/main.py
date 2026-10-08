@@ -122,7 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
                 result["schema"] = str(revision or "unavailable")
                 result["ready"] = revision == "93ad7c201b46"
-        except SQLAlchemyError:
+        except (SQLAlchemyError, OSError, TimeoutError):
             log.error("dependency_failed", error_code="DATABASE_OR_MIGRATION_UNAVAILABLE")
         if redis:
             from redis.exceptions import RedisError
@@ -140,16 +140,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        status = await dependencies()
-        if not status["ready"]:
-            raise RuntimeError("MIGRATIONS_OR_DEPENDENCIES_NOT_READY")
-        await store.initialize()
         try:
+            status = await dependencies()
+            if not status["ready"]:
+                raise RuntimeError("MIGRATIONS_OR_DEPENDENCIES_NOT_READY")
+            await store.initialize()
             yield
         finally:
-            if redis:
-                await redis.aclose()
-            await engine.dispose()
+            try:
+                if redis:
+                    await redis.aclose()
+            finally:
+                await engine.dispose()
 
     app = FastAPI(
         title="Arbitrage Intelligence API",

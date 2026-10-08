@@ -37,10 +37,18 @@ class VenueClient(Protocol):
     async def get_settlement(self, market: Market) -> D | None: ...
 
 
+class KalshiReadConfig(Protocol):
+    @property
+    def kalshi_environment(self) -> Literal["production", "demo"]: ...
+
+    @property
+    def btc_15m_enabled(self) -> bool: ...
+
+
 class KalshiClient:
     venue = Venue.KALSHI
 
-    def __init__(self, http: PublicHTTP, settings: Settings) -> None:
+    def __init__(self, http: PublicHTTP, settings: KalshiReadConfig) -> None:
         self.http = http
         self.btc_enabled = settings.btc_15m_enabled
         self.fee_deadlines: dict[str, datetime] = {}

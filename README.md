@@ -262,6 +262,47 @@ stress cases are separately labeled and never qualify as live arbitrage.
 The October 8 account check returned **margin enabled = false**. No account
 setting was changed. See report section 30 for primary sources and live results.
 
+## Bounded Kalshi-only BTC research
+
+The separate GET-only diagnostic screens `KXBTCD` threshold and `KXBTC` range
+contracts sharing the documented 60-second BRTI measurement. These are **not**
+the earlier 15-minute up/down cross-venue strategy. It evaluates lower-threshold
+YES + higher-threshold NO, disjoint-range NO pairs and bounded multi-NO baskets:
+
+```powershell
+$env:PYTHONPATH = "$PWD\backend"
+.\.venv\Scripts\python.exe scripts\single_venue_probe.py --samples 3 --interval 5 --cohorts 6 --max-quantity 100 --output "$env:TEMP\single-venue-research.json"
+# Optional GET-only scope/location/netting evidence using existing credentials:
+.\.venv\Scripts\python.exe scripts\single_venue_probe.py --account-evidence --output "$env:TEMP\single-venue-account-research.json"
+```
+
+Public mode does not load `.env` or account credentials. The probe requires
+5-10 open event cohorts and a reviewed terms hash; insufficient coverage or
+changed terms is an explicit error. It monitors every supported active contract
+in each selected cohort, batches at most 100 books per request, converts
+opposite-side bids into purchase asks and preserves request/receipt times.
+REST does not provide a book timestamp or guarantee atomic multi-book snapshots.
+
+Exact-Decimal pricing walks both/all legs at the same whole-contract quantity
+and maximizes conditional dollar profit within one **hypothetical $500 combined
+purchase budget**, without assuming collateral return. Current fee metadata,
+conservative rounding and execution buffers apply. The 3-10-leg NO-basket search
+selects lowest top asks; it is **not exhaustive depth/subset optimization**.
+
+The final October 8 screen monitored **636 contracts in six event cohorts
+(three settlement windows)**. Across three samples, **2,896** two-leg
+relationships had valid, sufficient pricing; none had positive gross
+minimum-payout economics, and none of **72** tested multi-NO basket observations
+was positive after modeled fees/buffers. Repeated quotes are observations,
+not independent opportunities. See report section 31 for exact counts and scope.
+
+All-scenario joint payouts, KYC/order permission and all-in costs remain
+unverified, so even a positive conditional quote would not qualify. All-YES
+range baskets fail the documented no-data scenario. Current crypto collateral
+return is disabled; enabling it may restrict selling and is never done by this
+tool. Synthetic failure tests are not genuine shadow trades. No orders, account
+changes, continuous worker, new dashboard or scheduled prompt are added.
+
 ## Honest limitations
 
 - Raw public rules often omit required policies or reliable game start. Such

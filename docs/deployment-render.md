@@ -24,8 +24,9 @@ All services use one region, no previews, paper-only flags, and checks-pass depl
 4. The API predeploy runs `alembic upgrade head`. First-start workers may wait for
    migrations; verify readiness before enabling paper simulation.
 5. Verify the frontend's `/health/ready`, login, three worker heartbeats and SSE:
-   `python scripts/verify_deployment.py --url https://<frontend> --workers`, with
-   `ARB_SMOKE_PASSWORD` set in the operator shell.
+   `python scripts\verify_deployment.py --url https://<frontend> --workers --expected-version <full-tested-commit-sha>`,
+   with `ARB_SMOKE_PASSWORD` set in the operator shell. The expected version must
+   identify the tested release, not merely whichever older deployment is healthy.
 6. Demo is the safe Blueprint default. To observe real public markets, create a
    separate public-mode database/deployment or explicitly isolate data; set
    `DATA_MODE=public` consistently. Do not mix synthetic research with observations.
@@ -51,15 +52,30 @@ approval, then wait for database availability, rerun the API migration/deploy,
 and verify all three role leases plus `/health/ready`. A Render worker deployment
 marked `live` is not proof of a healthy application heartbeat.
 
+Check individual service suspension too: restoring PostgreSQL cannot start a
+separately suspended maintenance worker. Resuming either existing paid resource
+requires explicit approval for its normal billing; do not infer approval from a
+request to repair code when the operator cannot answer the billing question.
+
 Workers retry transient DNS/connection failures during initialization, log only
 the error class and fail explicitly after the bounded startup window. They do
 not acquire healthy role leases until database/schema initialization succeeds.
 Failed startup disposes the connection pool.
 
+API dependency checks turn raw DNS, refused connections and timeouts into an
+explicit unavailable/HTTP 503 readiness result, not an uncaught network exception.
+Startup still fails closed without the migrated database. The API disposes its
+pool on failed startup as well as normal shutdown, including Redis-close errors.
+
 `RENDER_GIT_COMMIT` takes precedence over a manually set `BUILD_VERSION`; source
 provenance and worker heartbeat checks therefore follow the actual deployed
 commit. `BUILD_VERSION` remains a fallback for non-Render deployments. All
 services must reach the same new source version before rollout is accepted.
+The deployment smoke requires the exact three roles, their running/healthy
+leases, matching API build and demo/public source, and advancing aware timestamps.
+Duplicate/missing roles, mixed releases/sources, stopped roles and cached
+heartbeats fail verification. Checks-pass CI does not resume suspended resources
+or prove that Render has deployed the new commit.
 
 Before a rollback activate the paper kill switch. Restore a known image/commit
 through Render, assess migration compatibility, and inspect persisted submitted

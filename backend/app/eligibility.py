@@ -291,6 +291,39 @@ async def refresh_account_evidence(store: Store, client: httpx.AsyncClient) -> N
         await refresh_kalshi_scope(store, client)
 
 
+def decode_kalshi_scope(data: Any, key_id: str) -> dict[str, Any]:
+    if not isinstance(data, dict) or not isinstance(data.get("api_keys"), list):
+        raise VenueError("INVALID_KEY_SCOPE_RESPONSE")
+    keys = [
+        row for row in data["api_keys"] if isinstance(row, dict) and row.get("api_key_id") == key_id
+    ]
+    if len(keys) != 1 or not isinstance(keys[0].get("scopes"), list):
+        raise VenueError("CURRENT_KEY_SCOPE_UNAVAILABLE")
+    scopes = keys[0]["scopes"]
+    if any(not isinstance(value, str) for value in scopes):
+        raise VenueError("INVALID_KEY_SCOPE_RESPONSE")
+    subaccount = keys[0].get("subaccount")
+    if subaccount is not None and (type(subaccount) is not int or not 0 <= subaccount <= 63):
+        raise VenueError("INVALID_KEY_BINDING_RESPONSE")
+    binding = (
+        "institutional_subtrader"
+        if keys[0].get("fcm_subtrader_id")
+        else "bound_subaccount"
+        if subaccount not in (None, 0)
+        else "primary_account"
+    )
+    expiry = data.get("api_key_region_expiration_ts")
+    if expiry is not None and type(expiry) is not int:
+        raise VenueError("INVALID_KEY_REGION_EXPIRY")
+    return {
+        "trading_scope": "verified"
+        if binding != "institutional_subtrader" and {"write", "write::trade"} & set(scopes)
+        else "restricted",
+        "binding_status": binding,
+        "region_expiration_ts": expiry,
+    }
+
+
 async def refresh_kalshi_scope(store: Store, client: httpx.AsyncClient) -> None:
     settings = store.settings
     key = settings.kalshi_api_key
@@ -312,37 +345,7 @@ async def refresh_kalshi_scope(store: Store, client: httpx.AsyncClient) -> None:
         if not response.is_success:
             raise VenueError(f"KEY_SCOPE_HTTP_{response.status_code}")
         data = decode(response.text)
-        if not isinstance(data, dict) or not isinstance(data.get("api_keys"), list):
-            raise VenueError("INVALID_KEY_SCOPE_RESPONSE")
-        keys = [
-            row
-            for row in data["api_keys"]
-            if isinstance(row, dict) and row.get("api_key_id") == key.get_secret_value()
-        ]
-        if len(keys) != 1 or not isinstance(keys[0].get("scopes"), list):
-            raise VenueError("CURRENT_KEY_SCOPE_UNAVAILABLE")
-        scopes = keys[0]["scopes"]
-        if any(not isinstance(value, str) for value in scopes):
-            raise VenueError("INVALID_KEY_SCOPE_RESPONSE")
-        evidence["trading_scope"] = (
-            "verified" if {"write", "write::trade"} & set(scopes) else "restricted"
-        )
-        subaccount = keys[0].get("subaccount")
-        if subaccount is not None and (type(subaccount) is not int or not 0 <= subaccount <= 63):
-            raise VenueError("INVALID_KEY_BINDING_RESPONSE")
-        evidence["binding_status"] = (
-            "institutional_subtrader"
-            if keys[0].get("fcm_subtrader_id")
-            else "bound_subaccount"
-            if subaccount not in (None, 0)
-            else "primary_account"
-        )
-        if evidence["binding_status"] == "institutional_subtrader":
-            evidence["trading_scope"] = "restricted"
-        expiry = data.get("api_key_region_expiration_ts")
-        if expiry is not None and type(expiry) is not int:
-            raise VenueError("INVALID_KEY_REGION_EXPIRY")
-        evidence["region_expiration_ts"] = expiry
+        evidence.update(decode_kalshi_scope(data, key.get_secret_value()))
         if settings.kalshi_environment != "production":
             evidence["trading_scope"] = "unverified"
             evidence["error"] = "DEMO_ACCOUNT_NOT_PRODUCTION"

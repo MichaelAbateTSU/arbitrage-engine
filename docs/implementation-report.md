@@ -1433,3 +1433,294 @@ Alembic's model check found no missing migrations. Ruff formatting/lint and
 strict application mypy passed. The unchanged frontend passed 15 tests, types,
 formatting, lint and its production build. The three real-data samples above
 were read-only; the test database was removed afterward.
+
+## 31. Bounded Kalshi-only BTC feasibility pass
+
+**Outcome: no-go for execution, not a universal impossibility claim.** The next
+profitability hypothesis was tested against materially different same-venue
+threshold/range relationships rather than adding infrastructure or loosening
+gates. The completed plan was: establish exact payout predicates and exceptions;
+read current permission/cost evidence; monitor full selected cohorts at
+executable depth; consider basket alternatives; run genuine qualifying shadow
+trials only if a qualified candidate exists; finish with an explicit decision.
+No qualified candidate existed, so that last condition correctly prevented
+genuine shadow trials. The reusable diagnostic is local, not a deployed strategy.
+
+### Governing rules and corrected assumptions
+
+The full two-page [BTC contract terms](https://assets.kalshi.com/contract_terms/BTC.pdf)
+were read and hash-bound:
+`7bba1b819bd027e69755c76ed082e1004eb9466e170c1ae38996cf7d52e322a6`.
+The reader downloads and verifies this hash before any screen. Changed bytes
+require a new review, not an automatic approval.
+
+Both `KXBTCD` and `KXBTC` metadata identify CF Benchmarks BRTI and this terms URL.
+The measurement is the simple average over the 60 seconds before the stated
+time; subsequent revisions are excluded. The parser checks the full primary
+rules, binary $1 notional, exact strikes, source metadata, `close_time` and event
+`strike_date`. It does not infer a measurement from the ticker, subtitle or
+`occurrence_datetime` (which can be five minutes later). These families are
+**threshold/range contracts, not the original 15-minute up/down contracts**.
+Numeric strikes such as `81999.99` are preserved; "$82,000 or above" is not
+substituted as a rounding rule.
+
+| Relationship | Documented normal/no-data result | Classification |
+| --- | --- | --- |
+| Lower above-threshold YES + higher above-threshold NO | Normal minimum 1, maximum 2; shared no-data NO preserves minimum 1 | Potentially compatible, not approved |
+| NO on two disjoint range predicates | Normal minimum 1, maximum 2; no-data pays 2 | Potentially compatible, not approved |
+| N mutually exclusive predicates, all NO | Normal minimum N-1 when at most one YES; no-data pays N; exhaustive range coverage is unnecessary | Potentially compatible, not approved |
+| All-YES range basket | No-data resolves all strikes NO, giving payout 0 | Proven incompatible as a guaranteed hedge |
+
+Between predicates include both endpoints. Adjacent cent-separated ranges can
+leave continuous-value gaps, for example `199.995` between `199.99` and `200`.
+No rounding rule was independently established, so exhaustiveness is not
+claimed. This is a mathematical counterexample, not a claim that an actual
+settlement occurred inside a gap. The documented missing-data outcome alone
+conclusively defeats the all-YES hedge.
+
+Same venue, terms URL and BRTI measurement do **not** automatically prove the
+joint exceptional payout floor. BTC terms permit delayed settlement/outcome
+review, reference Rule 6.3(c) and Rule 7.1, and specify a latest expiration up to
+one week later. Current governing rulebook bodies were not retrieved: official
+rulebook/regulatory URLs returned HTTP 429; a legacy storage candidate returned
+404. Search-generated descriptions were not accepted as legal evidence, and
+rate limits were not circumvented. All-scenario minimum and outcome-review
+floor remain null; no contract family was approved.
+
+### Account, collateral and six additional-cost components
+
+Signed **GET-only** evidence at **2026-10-08 15:33:55 UTC** established current
+trading API scope, primary-account binding and a current location attestation.
+It did **not** establish KYC or account/market order permission. No real order,
+preview, transfer or account setting was used to test permission. Public output
+omits key IDs, names, signatures and raw private responses.
+
+The primary crypto account's current collateral-return flag was **false**.
+Event metadata labels threshold groups `DIRECNET` and range groups `MECNET`;
+those labels do not imply that this account receives early collateral.
+The official Help Center article "Collateral Return" (May 17, 2026) warns that
+returning collateral can prevent selling affected positions. Event-level
+eligibility is pinned by the first order, even if cancelled/unfilled, and cannot
+be changed retroactively. The current global flag does not establish historical
+per-event eligibility. The model assumes full purchase capital and never enables
+netting or treats a collateral credit as additional profit.
+
+Trading fee metadata is read from the current series plus effective event
+overrides; the observed quadratic coefficient was **0.07**. Conservative
+six-decimal fee ceilings, quantity-based and fixed alignment allowances are
+retained; accumulator rebates and fee-free maker fills are not assumed.
+The official Help Center "Fees" article (April 19, 2026) notes that market fees
+vary and some maker orders incur fees. A current full fee-schedule PDF request
+returned HTTP 429; a separate settlement fee was therefore **not** asserted zero.
+Source rate evidence is not a receipt proving a fee actually charged.
+
+The six additional components are recorded separately for a **hypothetical
+prefunded USD, buy-and-hold route with no transfers during the episode**:
+
+| Component | Route-specific disposition |
+| --- | --- |
+| Funding | Unresolved operator deposit/acquisition, financing and capital opportunity cost |
+| Conversion | Conditionally not applicable to USD/USD; operator route not verified |
+| Withdrawal | Not part of the episode; later bank route/cost unresolved |
+| Settlement | Current separate fee unresolved, not silently set to zero |
+| Rebalancing | No during-episode transfer assumed; emergency unwind fills/fees are modeled separately |
+| Network | Conditionally not applicable to a USD ledger route, not a crypto transfer |
+
+Conditional non-applicability is not complete operator evidence. All-in cost
+verification remains false. The configured **$500 shared purchase budget** is a
+research limit, not a verified balance or an actual capital reservation.
+
+### Complete monitored universe and bounded pricing results
+
+Public series/event discovery and the GET `/markets/orderbooks` batch endpoint
+were verified against real responses. Batches contain at most 100 repeated
+`tickers` query parameters and must return exactly the requested instrument set.
+Kalshi ladders are bids: YES asks are 1 minus NO bids; NO asks are 1 minus YES
+bids. Ascending wire ladders are canonicalized. Empty/zero-size ladders never
+fabricate liquidity; negative, malformed, duplicate, crossed or off-grid depth
+fails closed. There is no provider book timestamp, so actual request/receipt
+times are preserved; atomic cross-book capture and exchange freshness are not
+invented.
+
+Three full-universe screens were retained as separate session artifacts,
+without overwriting earlier evidence. The **final implementation's** three
+samples ran **2026-10-08 15:40:29.185785-15:41:14.618829 UTC**:
+
+| Event cohort | Monitored contracts | Measurement (UTC) |
+| --- | --- | --- |
+| `KXBTCD-26OCT0812`, `KXBTC-26OCT0812` | 188 each | October 8, 16:00 |
+| `KXBTCD-26OCT0817`, `KXBTC-26OCT0817` | 80 each | October 8, 21:00 |
+| `KXBTCD-26OCT0917`, `KXBTC-26OCT0917` | 50 each | October 9, 21:00 |
+
+Thus six event tickers represent **three independent measurement windows**.
+Every supported active instrument in each selected cohort was monitored:
+**636 unique contracts**, **1,908 instrument observations**, and **18 cohort
+observations**, with **zero provider/cohort errors and zero unparsed markets**.
+No monitoring cap excluded the distant strikes.
+
+| Final screen measure | Count |
+| --- | --- |
+| Two-leg relationship observations | 131,778 |
+| Valid, sufficiently sized/priced two-leg observations | 2,896 |
+| Empty purchase depth in at least one leg | 128,838 |
+| Insufficient whole-contract depth or combined capital | 44 |
+| Positive gross minimum-payout pair economics | 0 |
+| Positive pair economics after modeled fees/buffers | 0 |
+| Tested 3-10-leg multi-NO basket observations | 72 |
+| Positive tested basket economics after modeled fees/buffers | 0 |
+| Conditional economic episodes / qualified opportunities | 0 / 0 |
+| Genuine qualifying shadow trials | 0 |
+
+Rejection counts above are **relationship-level observations**, not counts of
+markets or independent opportunities. Every relationship additionally retained
+the unresolved joint-payout, account-order-permission and all-in-cost gates;
+reasons overlap and must not be summed as mutually exclusive failures.
+The dominant book issue was genuinely empty purchase depth in the sampled
+ladders, not unrequested subscriptions, an arbitrary cap or an asserted stall.
+
+At one matched contract, the best pair diagnostic cost **$1.0100**, had modeled
+fee bound **$0.022265** and execution buffer **$0.002525**, against conditional
+minimum payout **$1**: **-$0.034790 before unknown additional costs**.
+The best tested basket diagnostic was **-$0.459732**. Some normal outcomes can
+pay more than the conservative floor; a negative locked-margin result does not
+prove that every directional bet has negative expected value.
+
+The sizing model walks all legs at the same whole-contract quantity, defaults
+to quantities 1-100, and maximizes conditional **dollar** profit under the one
+combined budget. Where top asks already meet/exceed the conditional payout
+floor, deeper purchases cannot recover a positive gross margin, and the
+one-contract diagnostic avoids needless enumeration. Fees expire and all books
+must pass identity, grid, age, future-clock and receipt-skew checks. Acquisition
+buffers total **0.25%**, consistent with the existing latency/slippage model.
+None of these conditional calculations establishes fill certainty.
+
+### Alternatives, failure exercises and implementation boundary
+
+A pair-only screen can miss a multi-NO basket: a synthetic regression shows
+three 0.60 NO legs can be positive against payout floor 2 even though every
+two-leg pair is negative. The live diagnostic therefore tests 3-10-leg subsets
+chosen by lowest top NO asks. This bounded search is **not exhaustive**
+depth/subset optimization, not a maker/queue model, and not a screen of every
+cross-family or future-window combination.
+
+The original all-YES alternative was rejected by its explicit settlement
+counterexample rather than promoted as "risk-free." Same-venue threshold and
+multi-NO alternatives were evaluated on observed purchase depth and were also
+nonpositive in these windows. US-500 funding carry remains the distinct,
+perps-disabled, risk-bearing investigation in section 30; it was not used to
+manufacture a binary arbitrage result.
+
+Explicitly **synthetic** mathematical failure tests cover delayed/missing second
+books, partial and rejected second legs, adverse unwind losses and insufficient
+unwind depth. Unresolved residual exposure leaves PnL null. These tests are not
+persisted paper trades, realized profit or genuine qualifying shadow trials.
+No actual trial was run without settlement and permission qualification.
+Repeated positive conditional quotes would form one episode; book/cohort gaps
+interrupt coverage, rule changes end the old episode, and reordered identical
+legs do not create another opportunity.
+
+Implemented `backend/app/single_venue.py`, GET-only
+`backend/app/venues/single_venue.py` and `scripts/single_venue_probe.py`.
+Public construction cannot load `.env`; account evidence is an explicit flag.
+Shared exact-decimal and key-scope parsers are reused. Malformed financial
+strings now produce validation errors rather than leaking `InvalidOperation`.
+Malformed provider objects/fees produce explicit error codes, not success-shaped
+empty cohorts. There are no new API routes, database schemas, production workers,
+live order methods, dashboard features or scheduled prompts.
+
+**Decision:** the current bounded universe supplies no positive locked-margin
+candidate, and payout/permission/all-in-cost dependencies remain unproven.
+Keep execution disabled. Clearing permissions alone would not make these
+observed prices profitable; elapsed days, extra servers or weaker thresholds
+would not repair the contractual/economic evidence. This is a documented
+negative bounded result, not proof of permanent impossibility or a statistical
+long-run profitability estimate. Collection/coverage clocks were not restarted.
+Render billing and deployment were not changed, and local verification is not
+cloud health evidence. At the end of this initial pass, changes remained local
+and uncommitted; the subsequent requested release is recorded in section 32.
+
+### Verification
+
+**288 backend tests passed:** 283 in the ordinary full suite and all five real
+PostgreSQL cases against a dedicated, migrated PostgreSQL 17 database. The 53
+single-venue tests include payout boundaries, disjointness/gaps, depth-optimal
+sizing, shared capital, decimal rejection, grids/timestamps/fees, episode
+deduplication, sanitized account scope and malformed provider responses.
+Ruff lint/format, strict application mypy and paper-only Render blueprint checks
+passed. Alembic reported no model drift/missing migrations; no schema change was
+made. The session-owned database/container was removed; other users' containers
+were untouched. The frontend was not changed.
+
+## 32. Render recovery checks and requested release
+
+### Fresh cloud diagnosis and billing boundary
+
+GET-only inspection at **2026-10-08 16:23 UTC** independently reconfirmed the
+failure: `arb-postgres` was suspended with `suspenders: ["user"]`, on its existing
+`basic_256mb` plan. The maintenance worker was separately suspended. The API
+returned **HTTP 502**, and API/market-data/analysis logs contained database DNS
+errors. All four owned services were still associated with source
+`b6768380e693304c8ceaad51fc0c3f14d924b30e`, despite newer tested GitHub releases.
+The API's latest deployment was `pre_deploy_failed`; worker deployment labels
+of `live` did not establish a healthy running process.
+
+All services selected `main` and checks-pass automatic deployment. GitHub CI
+success is not actual Render deployment evidence. Repository webhook listing
+was empty, but GitHub App webhooks are not enumerated there, so this alone was
+**not** diagnosed as a missing Render webhook or fixed by creating new access.
+
+The user requested repair, testing, commit and push. Specific approval was
+requested to resume the existing database and maintenance worker on unchanged
+plans, restarting normal billing. The operator was unavailable to approve.
+No resumption, plan upgrade, replacement, firewall change, account access,
+destructive data reset or other paid-resource action was performed. Actual cloud
+recovery remains **blocked on that approval**, not falsely reported complete.
+No provider follow-up or scheduled prompt was restarted.
+
+### Implemented coupled reliability fixes
+
+API readiness previously caught SQLAlchemy exceptions but not raw database
+transport failures. Actual Render evidence included `gaierror`, which can escape
+the database driver's connection establishment. The dependency check now handles
+DNS/refused-connection `OSError` and timeouts explicitly: readiness is unavailable
+with HTTP 503, and logs contain only the standard error code, not private host
+messages. A later healthy connection can recover readiness. Missing database or
+migrations still prevent startup; no production table creation or fake readiness
+was introduced.
+
+API lifecycle cleanup now encloses dependency checking and initialization, so a
+failed startup also disposes the connection pool. Pool disposal still runs if
+Redis closure fails. Existing bounded worker startup recovery and actual
+`RENDER_GIT_COMMIT` precedence remain intact.
+
+Deployment smoke previously accepted a count of healthy rows without requiring
+the intended build or exact role set. It now uses typed application-evidence
+helpers and `--expected-version` to require the tested API commit, paper-only
+configuration, the exact `market-data`, `analysis`, `maintenance` roles, matching
+build/source, running healthy leases and aware advancing heartbeat timestamps.
+Missing/duplicate/stopped roles, mixed releases/sources, unavailable dependencies
+and cached heartbeats are rejected. The deployment runbook requires an explicit
+tested commit rather than blessing an old healthy release.
+
+This release includes the previously local bounded single-venue BTC diagnostic
+and its results from section 31. Publishing it does not enable a new production
+strategy, approve settlement hedges or create a profitable trading claim.
+
+### Local verification versus cloud acceptance
+
+The full backend passed **306 tests**: 301 ordinary-suite tests plus all five
+real PostgreSQL cases on a dedicated, migrated PostgreSQL 17 database. Ruff,
+formatting, strict application mypy, Alembic drift checks and paper-only Blueprint
+validation passed. Frontend formatting/types/build and **15 tests** passed.
+An existing nonfatal TanStack React Compiler lint warning was unchanged.
+
+The isolated demo API and all three worker roles passed authenticated deployment
+smoke, advancing same-version heartbeat checks and SSE. An intentionally wrong
+expected release was explicitly rejected. The Chromium dashboard/paper/validation
+and accessibility workflow passed. The first browser attempt correctly rejected
+the custom local port's unconfigured origin; the isolated test origin was then
+configured explicitly without weakening production CORS/CSRF protections.
+These results are local evidence,
+**not cloud health or restored billing evidence**. Cloud acceptance still requires
+approved resumption, deployment of the tested commit, readiness, login and all
+three advancing source-matched role leases against the real Render URL.

@@ -1,7 +1,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
@@ -12,6 +12,18 @@ Positive = Annotated[Decimal, Field(gt=0, max_digits=24, decimal_places=8)]
 Nonnegative = Annotated[Decimal, Field(ge=0, max_digits=24, decimal_places=8)]
 Amount = Annotated[Decimal, Field(ge=0)]
 Price = Annotated[Decimal, Field(ge=0, le=1)]
+
+
+def exact_decimal(value: Any) -> Decimal:
+    if isinstance(value, (float, bool)) or not isinstance(value, (str, int, Decimal)):
+        raise ValueError("EXACT_DECIMAL_REQUIRED")
+    try:
+        result = D(value)
+    except InvalidOperation as exc:
+        raise ValueError("EXACT_DECIMAL_REQUIRED") from exc
+    if not result.is_finite():
+        raise ValueError("FINITE_DECIMAL_REQUIRED")
+    return result
 
 
 def now() -> datetime:
@@ -49,8 +61,7 @@ class Model(BaseModel):
         if field and field.annotation is Decimal:
             if isinstance(value, (float, bool)):
                 raise ValueError("Financial values must not be floats or booleans")
-            if not D(value).is_finite():
-                raise ValueError("Financial values must be finite")
+            return exact_decimal(value)
         return value
 
 
