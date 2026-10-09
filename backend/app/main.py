@@ -114,6 +114,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "schema": "unavailable",
             "redis": "not_configured",
             "ready": False,
+            "trading_mode": config.trading_mode,
         }
         try:
             async with sessions() as session:
